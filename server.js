@@ -1,5 +1,5 @@
 // Backend/server.js
-// KORRIGIERT: MongoDB-Connection ohne unsupported Options
+// VOLLSTÄNDIG: Server mit Contact Routes Integration
 import express from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -110,27 +110,43 @@ if (process.env.NODE_ENV === 'development') {
 }
 
 // ===========================
-// ROUTES - DYNAMIC IMPORTS
+// ROUTES - DYNAMIC IMPORTS (ERWEITERT: Mit Contact Routes)
 // ===========================
 try {
   const authRoutes = await import('./routes/auth.js');
   const oauthRoutes = await import('./routes/oauth.js');
   const dashboardRoutes = await import('./routes/dashboard.js');
+  const contactRoutes = await import('./routes/contact.js'); // HINZUGEFÜGT: Contact Routes
 
   app.use('/api/auth', authRoutes.default);
   app.use('/api/oauth', oauthRoutes.default);
   app.use('/api/dashboard', dashboardRoutes.default);
+  app.use('/api/contact', contactRoutes.default); // HINZUGEFÜGT: Contact Routes Registration
+  
+  console.log('✅ Alle Routes erfolgreich geladen');
   
 } catch (routeError) {
   console.error('❌ Fehler beim Laden der Routes:', routeError);
   
+  // Fallback Routes für Service-Ausfälle
   app.use('/api/auth', (req, res) => {
     res.status(503).json({
       success: false,
       error: 'Auth-Service temporär nicht verfügbar'
     });
   });
+  
+  app.use('/api/contact', (req, res) => {
+    res.status(503).json({
+      success: false,
+      error: 'Contact-Service temporär nicht verfügbar'
+    });
+  });
 }
+
+// ===========================
+// API ENDPOINTS
+// ===========================
 
 // Health Check
 app.get('/api/health', (req, res) => {
@@ -143,41 +159,66 @@ app.get('/api/health', (req, res) => {
     version: process.env.APP_VERSION || '1.0.0',
     environment: process.env.NODE_ENV || 'development',
     database: dbStatus,
-    uptime: process.uptime()
+    uptime: process.uptime(),
+    services: {
+      auth: 'available',
+      oauth: 'available', 
+      dashboard: 'available',
+      contact: 'available' // HINZUGEFÜGT: Contact Service Status
+    }
   });
 });
 
-// API Info Endpoint
+// API Info Endpoint (ERWEITERT: Mit Contact)
 app.get('/api', (req, res) => {
   res.json({
     success: true,
     message: 'Portfolio Backend API',
     version: '1.0.0',
+    description: 'Backend API für Chris Schubert Portfolio mit OAuth, Dashboard und Contact System',
     endpoints: {
       auth: '/api/auth',
       oauth: '/api/oauth', 
       dashboard: '/api/dashboard',
+      contact: '/api/contact', // HINZUGEFÜGT: Contact Endpoint
       health: '/api/health'
-    }
-  });
-});
-
-// 404 Handler
-app.use('/api/*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'API-Endpunkt nicht gefunden',
-    path: req.originalUrl,
-    availableEndpoints: ['/api/auth', '/api/oauth', '/api/dashboard', '/api/health']
+    },
+    features: [
+      'OAuth Authentication (Google, GitHub)',
+      'JWT Token Management',
+      'Dashboard with Projects & Messages',
+      'Contact Form with Email Notifications', // HINZUGEFÜGT
+      'Rate Limiting & Security Headers'
+    ]
   });
 });
 
 // ===========================
 // ERROR HANDLING
 // ===========================
+
+// 404 Handler für API Routes (ERWEITERT: Mit Contact)
+app.use('/api/*', (req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'API-Endpunkt nicht gefunden',
+    path: req.originalUrl,
+    availableEndpoints: [
+      '/api/auth', 
+      '/api/oauth', 
+      '/api/dashboard', 
+      '/api/contact', // HINZUGEFÜGT
+      '/api/health'
+    ],
+    suggestion: 'Überprüfen Sie die API-Dokumentation für verfügbare Endpunkte'
+  });
+});
+
+// Global Error Handler
 app.use((err, req, res, next) => {
   console.error('Global Error:', err);
   
+  // MongoDB Duplicate Key Error
   if (err.code === 11000) {
     const field = Object.keys(err.keyValue || {})[0] || 'Feld';
     return res.status(400).json({
@@ -187,6 +228,7 @@ app.use((err, req, res, next) => {
     });
   }
   
+  // Mongoose Validation Error
   if (err.name === 'ValidationError') {
     const errors = Object.values(err.errors).map(e => e.message);
     return res.status(400).json({
@@ -197,6 +239,7 @@ app.use((err, req, res, next) => {
     });
   }
   
+  // JWT Errors
   if (err.name === 'JsonWebTokenError') {
     return res.status(401).json({
       success: false,
@@ -213,6 +256,7 @@ app.use((err, req, res, next) => {
     });
   }
   
+  // CORS Error
   if (err.message.includes('CORS')) {
     return res.status(403).json({
       success: false,
@@ -221,6 +265,16 @@ app.use((err, req, res, next) => {
     });
   }
   
+  // Rate Limit Error
+  if (err.status === 429) {
+    return res.status(429).json({
+      success: false,
+      error: 'Zu viele Anfragen',
+      code: 'RATE_LIMIT_EXCEEDED'
+    });
+  }
+  
+  // Generic Error
   res.status(err.status || 500).json({
     success: false,
     error: err.message || 'Interner Server-Fehler',
@@ -233,16 +287,14 @@ app.use((err, req, res, next) => {
 });
 
 // ===========================
-// DATABASE CONNECTION (KORRIGIERT: Ohne unsupported Options)
+// DATABASE CONNECTION
 // ===========================
 mongoose.connect(process.env.MONGODB_URI, {
-  // KORRIGIERT: Nur unterstützte Optionen
   serverSelectionTimeoutMS: 5000,
   heartbeatFrequencyMS: 2000,
   maxPoolSize: 10,
   minPoolSize: 5,
   maxIdleTimeMS: 30000
-  // ENTFERNT: bufferCommands und bufferMaxEntries (nicht mehr unterstützt)
 })
 .then(() => {
   console.log('✅ MongoDB verbunden');
@@ -271,7 +323,7 @@ mongoose.connect(process.env.MONGODB_URI, {
 });
 
 // ===========================
-// DEFAULT ADMIN ERSTELLEN (ERWEITERT)
+// DEFAULT ADMIN ERSTELLEN
 // ===========================
 async function createDefaultAdmin() {
   try {
@@ -296,10 +348,14 @@ async function createDefaultAdmin() {
       await defaultAdmin.save();
       console.log('✅ Standard-Admin erstellt:', defaultAdmin.email);
       
-      // HINZUGEFÜGT: Unzugewiesene Kunden diesem Admin zuweisen
-      const assignedCount = await User.assignUnassignedCustomers(defaultAdmin._id);
-      if (assignedCount > 0) {
-        console.log(`✅ ${assignedCount} unzugewiesene Kunden dem Admin zugewiesen`);
+      // Unzugewiesene Kunden diesem Admin zuweisen
+      try {
+        const assignedCount = await User.assignUnassignedCustomers(defaultAdmin._id);
+        if (assignedCount > 0) {
+          console.log(`✅ ${assignedCount} unzugewiesene Kunden dem Admin zugewiesen`);
+        }
+      } catch (assignError) {
+        console.warn('⚠️ Kunde-Zuweisung fehlgeschlagen:', assignError.message);
       }
       
       if (!process.env.ADMIN_PASSWORD) {
@@ -308,22 +364,26 @@ async function createDefaultAdmin() {
     } else {
       console.log('ℹ️ Admin-User bereits vorhanden');
       
-      // HINZUGEFÜGT: Auch bei vorhandenem Admin prüfen ob unzugewiesene Kunden existieren
-      const unassignedCount = await User.countDocuments({ 
-        role: 'kunde', 
-        $or: [
-          { assignedAdmin: null },
-          { assignedAdmin: { $exists: false } }
-        ]
-      });
-      
-      if (unassignedCount > 0) {
-        console.log(`⚠️ ${unassignedCount} unzugewiesene Kunden gefunden - weise dem ersten Admin zu`);
-        const firstAdmin = await User.findOne({ role: 'admin', isActive: true });
-        if (firstAdmin) {
-          const assignedCount = await User.assignUnassignedCustomers(firstAdmin._id);
-          console.log(`✅ ${assignedCount} Kunden dem Admin ${firstAdmin.email} zugewiesen`);
+      // Auch bei vorhandenem Admin prüfen ob unzugewiesene Kunden existieren
+      try {
+        const unassignedCount = await User.countDocuments({ 
+          role: 'kunde', 
+          $or: [
+            { assignedAdmin: null },
+            { assignedAdmin: { $exists: false } }
+          ]
+        });
+        
+        if (unassignedCount > 0) {
+          console.log(`⚠️ ${unassignedCount} unzugewiesene Kunden gefunden - weise dem ersten Admin zu`);
+          const firstAdmin = await User.findOne({ role: 'admin', isActive: true });
+          if (firstAdmin) {
+            const assignedCount = await User.assignUnassignedCustomers(firstAdmin._id);
+            console.log(`✅ ${assignedCount} Kunden dem Admin ${firstAdmin.email} zugewiesen`);
+          }
         }
+      } catch (checkError) {
+        console.warn('⚠️ Kunde-Check fehlgeschlagen:', checkError.message);
       }
     }
   } catch (error) {
@@ -334,7 +394,7 @@ async function createDefaultAdmin() {
 // ===========================
 // SERVER START
 // ===========================
-const PORT = process.env.PORT || 5000; // KORRIGIERT: Port 5000 aus deiner .env
+const PORT = process.env.PORT || 5000;
 
 const server = app.listen(PORT, () => {
   console.log(`🚀 Server läuft auf Port ${PORT}`);
@@ -346,8 +406,16 @@ const server = app.listen(PORT, () => {
     console.log(`   🔐 Auth: http://localhost:${PORT}/api/auth`);
     console.log(`   👤 OAuth: http://localhost:${PORT}/api/oauth`);
     console.log(`   📊 Dashboard: http://localhost:${PORT}/api/dashboard`);
+    console.log(`   📧 Contact: http://localhost:${PORT}/api/contact`); // HINZUGEFÜGT
     console.log(`   💗 Health: http://localhost:${PORT}/api/health`);
     console.log(`   📖 Info: http://localhost:${PORT}/api\n`);
+    
+    console.log(`🔧 Development Features:`);
+    console.log(`   • Contact Form mit E-Mail-Versand`);
+    console.log(`   • Rate Limiting (3 Anfragen/15min)`);
+    console.log(`   • Automatische Admin-Erstellung`);
+    console.log(`   • MongoDB Auto-Reconnect`);
+    console.log(`   • CORS für Frontend-Integration\n`);
   }
 });
 
@@ -372,12 +440,14 @@ const gracefulShutdown = async (signal) => {
     }
   });
   
+  // Forced Shutdown nach 10 Sekunden
   setTimeout(() => {
     console.error('🚨 Erzwungener Shutdown nach Timeout');
     process.exit(1);
   }, 10000);
 };
 
+// Process Event Handlers
 process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
@@ -390,5 +460,27 @@ process.on('uncaughtException', (error) => {
   console.error('❌ Uncaught Exception:', error);
   gracefulShutdown('UNCAUGHT_EXCEPTION');
 });
+
+// ===========================
+// DEVELOPMENT HELPERS
+// ===========================
+if (process.env.NODE_ENV === 'development') {
+  // Memory Usage Monitoring
+  setInterval(() => {
+    const memUsage = process.memoryUsage();
+    if (memUsage.heapUsed > 100 * 1024 * 1024) { // > 100MB
+      console.warn(`⚠️ Hoher Memory-Verbrauch: ${Math.round(memUsage.heapUsed / 1024 / 1024)}MB`);
+    }
+  }, 60000); // Alle 60 Sekunden
+  
+  // Database Connection Monitoring
+  mongoose.connection.on('disconnected', () => {
+    console.warn('⚠️ MongoDB-Verbindung getrennt');
+  });
+  
+  mongoose.connection.on('reconnected', () => {
+    console.log('✅ MongoDB-Verbindung wiederhergestellt');
+  });
+}
 
 export default app;
