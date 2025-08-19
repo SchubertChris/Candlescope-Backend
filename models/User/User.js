@@ -1,9 +1,9 @@
 // Backend/models/User/User.js
-// KORRIGIERT: ES Modules Version
+// KORRIGIERT: assignedAdmin NIEMALS required machen + Erweiterte Features
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
-  // OAuth/Auth Felder (bereits vorhanden)
+  // OAuth/Auth Felder
   email: {
     type: String,
     required: true,
@@ -11,17 +11,19 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     trim: true
   },
-  
+ 
   // OAuth Provider Daten
   googleId: {
     type: String,
-    sparse: true
+    sparse: true,
+    unique: true
   },
   githubId: {
     type: String,
-    sparse: true
+    sparse: true,
+    unique: true
   },
-  
+ 
   // Lokale Registrierung
   password: {
     type: String,
@@ -29,14 +31,15 @@ const userSchema = new mongoose.Schema({
       return !this.googleId && !this.githubId;
     }
   },
-  
-  // ERWEITERT: Rollensystem
+ 
+  // Rollensystem
   role: {
     type: String,
     enum: ['admin', 'kunde'],
-    default: 'kunde'
+    default: 'kunde',
+    index: true
   },
-  
+ 
   // Profil-Informationen
   firstName: {
     type: String,
@@ -53,22 +56,33 @@ const userSchema = new mongoose.Schema({
     trim: true,
     maxlength: 100
   },
-  
-  // Avatar (später für Bildupload)
+ 
+  // Avatar
   avatar: {
     type: String,
     default: null
   },
-  
-  // HINZUGEFÜGT: Kunde-Admin Zuordnung
+ 
+  // KORRIGIERT: assignedAdmin NIEMALS required machen
   assignedAdmin: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
-    required: function() {
-      return this.role === 'kunde';
+    required: false, // GEÄNDERT: Niemals required!
+    default: null,   // HINZUGEFÜGT: Expliziter Default-Wert
+    index: true,
+    validate: {
+      validator: async function(value) {
+        // Nur validieren wenn Wert gesetzt ist
+        if (!value) return true;
+        
+        // Prüfen ob referenzierter User Admin ist
+        const admin = await mongoose.model('User').findById(value);
+        return admin && admin.role === 'admin';
+      },
+      message: 'Zugewiesener Admin muss existieren und Admin-Rolle haben'
     }
   },
-  
+ 
   // Account Status
   isActive: {
     type: Boolean,
@@ -78,48 +92,62 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
+ 
   // Zeitstempel
   lastLogin: {
     type: Date,
     default: Date.now
-  },
-  
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
 }, {
-  timestamps: true,
+  timestamps: true, // Automatische createdAt/updatedAt
   toJSON: {
     transform: function(doc, ret) {
-      delete ret.password;
-      delete ret.__v;
+      delete ret.password; // SICHERHEIT: Passwort nie in JSON ausgeben
+      delete ret.__v;      // SAUBERKEIT: Mongoose-Version entfernen
       return ret;
     }
   }
 });
 
-// HINZUGEFÜGT: Indexe für Performance
-userSchema.index({ email: 1 });
-userSchema.index({ role: 1 });
-userSchema.index({ assignedAdmin: 1 });
-userSchema.index({ googleId: 1 });
-userSchema.index({ githubId: 1 });
+// KORRIGIERT: Compound Index für bessere Performance
+userSchema.index({ assignedAdmin: 1, isActive: 1 });
+userSchema.index({ role: 1, isActive: 1 });
 
-// HINZUGEFÜGT: Middleware für updatedAt
-userSchema.pre('save', function(next) {
-  this.updatedAt = new Date();
+// HINZUGEFÜGT: Pre-save Middleware für Auto-Assignment
+userSchema.pre('save', async function(next) {
+  // Nur bei neuen Kunden ohne assignedAdmin
+  if (this.isNew && this.role === 'kunde' && !this.assignedAdmin) {
+    try {
+      // Ersten verfügbaren Admin finden
+      const availableAdmin = await mongoose.model('User').findOne({
+        role: 'admin',
+        isActive: true
+      }).sort({ createdAt: 1 }); // Ältester Admin zuerst
+      
+      if (availableAdmin) {
+        this.assignedAdmin = availableAdmin._id;
+        console.log(`✅ Auto-assigned Admin ${availableAdmin.email} to customer ${this.email}`);
+      } else {
+        console.log(`⚠️ Kein Admin verfügbar für Customer ${this.email} - bleibt unzugewiesen`);
+      }
+    } catch (error) {
+      console.error('❌ Auto-Assignment Fehler:', error);
+      // Fehler nicht weiterwerfen - Assignment kann später erfolgen
+    }
+  }
   next();
 });
 
 // HINZUGEFÜGT: Virtuelle Felder
 userSchema.virtual('fullName').get(function() {
   return `${this.firstName || ''} ${this.lastName || ''}`.trim() || this.email;
+});
+
+userSchema.virtual('displayName').get(function() {
+  if (this.firstName || this.lastName) {
+    return this.fullName;
+  }
+  return this.firstName || this.email.split('@')[0];
 });
 
 // HINZUGEFÜGT: Instance Methods
@@ -131,6 +159,15 @@ userSchema.methods.isKunde = function() {
   return this.role === 'kunde';
 };
 
+userSchema.methods.isOAuthUser = function() {
+  return !!(this.googleId || this.githubId);
+};
+
+userSchema.methods.updateLastLogin = function() {
+  this.lastLogin = new Date();
+  return this.save();
+};
+
 // HINZUGEFÜGT: Static Methods
 userSchema.statics.findAdmins = function() {
   return this.find({ role: 'admin', isActive: true });
@@ -138,6 +175,63 @@ userSchema.statics.findAdmins = function() {
 
 userSchema.statics.findKundenByAdmin = function(adminId) {
   return this.find({ assignedAdmin: adminId, isActive: true });
+};
+
+userSchema.statics.findByOAuth = function(provider, providerId) {
+  const query = {};
+  if (provider === 'google') {
+    query.googleId = providerId;
+  } else if (provider === 'github') {
+    query.githubId = providerId;
+  }
+  return this.findOne(query);
+};
+
+// HINZUGEFÜGT: Statische Methode für nachträgliche Zuweisung
+userSchema.statics.assignUnassignedCustomers = async function(adminId) {
+  try {
+    const result = await this.updateMany(
+      { 
+        role: 'kunde', 
+        $or: [
+          { assignedAdmin: null },
+          { assignedAdmin: { $exists: false } }
+        ]
+      },
+      { 
+        $set: { assignedAdmin: adminId } 
+      }
+    );
+    
+    console.log(`✅ ${result.modifiedCount} unzugewiesene Kunden dem Admin zugewiesen`);
+    return result.modifiedCount;
+  } catch (error) {
+    console.error('❌ Fehler beim Zuweisen unzugewiesener Kunden:', error);
+    return 0;
+  }
+};
+
+// HINZUGEFÜGT: Statistik-Methoden
+userSchema.statics.getStats = async function() {
+  const stats = await this.aggregate([
+    {
+      $group: {
+        _id: '$role',
+        count: { $sum: 1 },
+        active: { $sum: { $cond: ['$isActive', 1, 0] } },
+        verified: { $sum: { $cond: ['$isEmailVerified', 1, 0] } }
+      }
+    }
+  ]);
+  
+  return stats.reduce((acc, stat) => {
+    acc[stat._id] = {
+      total: stat.count,
+      active: stat.active,
+      verified: stat.verified
+    };
+    return acc;
+  }, {});
 };
 
 export default mongoose.model('User', userSchema);
