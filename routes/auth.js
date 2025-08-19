@@ -1,5 +1,5 @@
 // routes/auth.js
-// KORRIGIERT: Auth-Routes mit robuster Fehlerbehandlung
+// KORRIGIERT: Auth-Routes mit OAuth-Integration und robuster Fehlerbehandlung
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
@@ -8,6 +8,11 @@ import emailService from "../services/email-service.js";
 import { loginLimiter, accountCreationLimiter, emailRateLimiter } from "../middleware/rate-limit.js";
 
 const router = express.Router();
+
+// HINZUGEFÜGT: Dynamische Frontend-URL
+const getFrontendURL = () => {
+  return process.env.FRONTEND_URL || 'http://localhost:5173';
+};
 
 // Login mit automatischer Account-Erstellung
 router.post("/login", 
@@ -57,16 +62,16 @@ router.post("/login",
           
           const hashedPassword = await bcrypt.hash(randomPassword, 10);
           
-          // KORRIGIERT: User mit erweiterten Feldern erstellen
+          // KORRIGIERT: User mit erweiterten Feldern erstellen (assignedAdmin wird durch Pre-save Middleware gesetzt)
           user = new User({ 
             email: email.toLowerCase().trim(),
             password: hashedPassword,
-            role: 'kunde', // Standard-Role
+            role: 'kunde', // Standard-Role - assignedAdmin wird automatisch durch Pre-save gesetzt
             isEmailVerified: false,
             isActive: true
           });
           
-          await user.save();
+          await user.save(); // Pre-save Middleware setzt automatisch assignedAdmin
           console.log("✅ NEW USER CREATED:", email);
           
           // Email Rate-Limiting increment
@@ -142,7 +147,7 @@ router.post("/login",
 
       // KORRIGIERT: JWT Token mit userId (für Dashboard-Kompatibilität)
       const token = jwt.sign({ 
-        userId: user._id,  // KORRIGIERT: userId statt id
+        userId: user._id,  // Dashboard erwartet userId
         email: user.email,
         role: user.role 
       }, process.env.JWT_SECRET, {
@@ -158,7 +163,7 @@ router.post("/login",
         success: true,
         token, 
         user: { 
-          id: user._id, 
+          id: user._id, // Frontend erwartet id
           email: user.email,
           role: user.role,
           firstName: user.firstName,
@@ -179,6 +184,29 @@ router.post("/login",
     }
   }
 );
+
+// HINZUGEFÜGT: OAuth-Redirect Routes für Frontend-Kompatibilität
+// Diese Routes leiten auf die korrekten OAuth-Endpunkte weiter
+router.get("/google", (req, res) => {
+  console.log("🔗 REDIRECTING GOOGLE OAUTH from /auth/google to /oauth/google");
+  res.redirect(`/api/oauth/google`);
+});
+
+router.get("/github", (req, res) => {
+  console.log("🔗 REDIRECTING GITHUB OAUTH from /auth/github to /oauth/github");
+  res.redirect(`/api/oauth/github`);
+});
+
+// HINZUGEFÜGT: OAuth Callback-Handler (falls Frontend diese URLs verwendet)
+router.get("/google/callback", (req, res) => {
+  console.log("🔗 REDIRECTING GOOGLE CALLBACK from /auth/google/callback to /oauth/google/callback");
+  res.redirect(`/api/oauth/google/callback${req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''}`);
+});
+
+router.get("/github/callback", (req, res) => {
+  console.log("🔗 REDIRECTING GITHUB CALLBACK from /auth/github/callback to /oauth/github/callback");
+  res.redirect(`/api/oauth/github/callback${req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : ''}`);
+});
 
 // User-Profil abrufen
 router.get("/profile", async (req, res) => {
@@ -239,6 +267,19 @@ router.post("/logout", (req, res) => {
   res.json({
     success: true,
     message: "Logout erfolgreich"
+  });
+});
+
+// HINZUGEFÜGT: OAuth Status für Debugging
+router.get("/oauth-status", (req, res) => {
+  res.json({
+    success: true,
+    message: "OAuth-Redirects aktiv",
+    redirects: {
+      google: "/api/oauth/google",
+      github: "/api/oauth/github"
+    },
+    frontendURL: getFrontendURL()
   });
 });
 
