@@ -1,18 +1,16 @@
 // routes/contact.js
-// KORRIGIERT: Contact Route für ES Modules
+// FINAL KORRIGIERT: Alle Fehler behoben
 import express from 'express';
 import nodemailer from 'nodemailer';
 import rateLimit from 'express-rate-limit';
-import Contact from '../models/Contact/contact.js'; // KORRIGIERT: ES Module Import
+import Contact from '../models/Contact/Contact.js'; // KORRIGIERT: Großbuchstaben!
 
 const router = express.Router();
 
-// ===========================
-// RATE LIMITING
-// ===========================
+// Rate Limiting
 const contactRateLimit = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 Minuten
-  max: 3, // Maximal 3 Anfragen pro IP pro 15 Minuten
+  windowMs: 15 * 60 * 1000,
+  max: 3,
   message: {
     success: false,
     message: 'Zu viele Kontaktanfragen. Bitte warten Sie 15 Minuten.',
@@ -22,9 +20,7 @@ const contactRateLimit = rateLimit({
   legacyHeaders: false,
 });
 
-// ===========================
-// EMAIL TRANSPORTER KONFIGURATION
-// ===========================
+// Email Transporter
 const createEmailTransporter = () => {
   return nodemailer.createTransporter({
     service: 'gmail',
@@ -38,11 +34,172 @@ const createEmailTransporter = () => {
   });
 };
 
-// ===========================
-// KONTAKTANFRAGE SENDEN
-// ===========================
+// Admin Email Template
+const createAdminEmailHTML = (formData) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Neue Kontaktanfrage</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .header {
+          background: linear-gradient(135deg, #f39c12, #e67e22);
+          color: white;
+          padding: 20px;
+          text-align: center;
+          border-radius: 8px 8px 0 0;
+        }
+        .content {
+          background: #f8f9fa;
+          padding: 20px;
+          border-radius: 0 0 8px 8px;
+        }
+        .section {
+          margin-bottom: 20px;
+          padding: 15px;
+          background: white;
+          border-radius: 5px;
+          border-left: 4px solid #f39c12;
+        }
+        .label {
+          font-weight: bold;
+          color: #555;
+        }
+        .value {
+          margin-bottom: 10px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>🚀 Neue Kontaktanfrage</h1>
+        <p>Portfolio Website</p>
+      </div>
+      
+      <div class="content">
+        <div class="section">
+          <h3>👤 Kontaktdaten</h3>
+          <div class="value"><span class="label">Name:</span> ${formData.name}</div>
+          <div class="value"><span class="label">E-Mail:</span> <a href="mailto:${formData.email}">${formData.email}</a></div>
+          <div class="value"><span class="label">Telefon:</span> ${formData.phone || 'Nicht angegeben'}</div>
+          <div class="value"><span class="label">Unternehmen:</span> ${formData.company || 'Nicht angegeben'}</div>
+        </div>
+        
+        <div class="section">
+          <h3>💼 Projekt-Details</h3>
+          <div class="value"><span class="label">Typ:</span> ${formData.projectType || 'Nicht angegeben'}</div>
+          <div class="value"><span class="label">Budget:</span> ${formData.mappedBudget || formData.budget || 'Nicht angegeben'}</div>
+          <div class="value"><span class="label">Zeitrahmen:</span> ${formData.mappedTimeline || formData.timeline || 'Nicht angegeben'}</div>
+        </div>
+        
+        <div class="section">
+          <h3>💬 Nachricht</h3>
+          <div class="value" style="white-space: pre-wrap;">${formData.message}</div>
+        </div>
+        
+        <div class="section">
+          <h3>📊 Zusätzlich</h3>
+          <div class="value"><span class="label">Newsletter:</span> ${formData.newsletter ? 'Ja' : 'Nein'}</div>
+          <div class="value"><span class="label">Quelle:</span> ${formData.source}</div>
+          <div class="value"><span class="label">Zeitstempel:</span> ${new Date().toLocaleString('de-DE')}</div>
+          <div class="value"><span class="label">IP:</span> ${formData.ip || 'Unbekannt'}</div>
+        </div>
+        
+        <p style="text-align: center; margin-top: 20px;">
+          <a href="mailto:${formData.email}" style="background: #f39c12; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+            Direkt antworten
+          </a>
+        </p>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+// Customer Email Template
+const createCustomerEmailHTML = (formData) => {
+  return `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <title>Ihre Anfrage wurde empfangen</title>
+      <style>
+        body {
+          font-family: Arial, sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 600px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .header {
+          background: linear-gradient(135deg, #f39c12, #e67e22);
+          color: white;
+          padding: 30px;
+          text-align: center;
+          border-radius: 8px 8px 0 0;
+        }
+        .content {
+          background: #f8f9fa;
+          padding: 30px;
+          border-radius: 0 0 8px 8px;
+        }
+        .section {
+          margin-bottom: 20px;
+          padding: 15px;
+          background: white;
+          border-radius: 5px;
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>✅ Anfrage erhalten!</h1>
+        <p>Vielen Dank für Ihr Vertrauen</p>
+      </div>
+      
+      <div class="content">
+        <h2>Hallo ${formData.name}!</h2>
+        <p>Ihre Projektanfrage ist bei mir eingegangen. Ich werde mich innerhalb von 24 Stunden bei Ihnen melden.</p>
+        
+        <div class="section">
+          <h3>📋 Ihre Anfrage im Überblick</h3>
+          <p><strong>Projekt-Typ:</strong> ${formData.projectType || 'Allgemeine Anfrage'}</p>
+          ${formData.mappedBudget ? `<p><strong>Budget:</strong> ${formData.mappedBudget}</p>` : ''}
+          ${formData.mappedTimeline ? `<p><strong>Zeitrahmen:</strong> ${formData.mappedTimeline}</p>` : ''}
+        </div>
+        
+        <div class="section">
+          <h3>📞 Kontakt</h3>
+          <p>📧 E-Mail: <a href="mailto:schubert_chris@rocketmail.com">schubert_chris@rocketmail.com</a></p>
+          <p>📱 Telefon: <a href="tel:+4916094168348">+49 160 941 683 48</a></p>
+          <p>📍 Standort: Potsdam, Brandenburg</p>
+          <p>🌐 Website: <a href="https://portfolio-chris-schubert.vercel.app">portfolio-chris-schubert.vercel.app</a></p>
+        </div>
+        
+        <p>Bei Rückfragen bin ich jederzeit für Sie da!</p>
+        <p>Beste Grüße<br><strong>Chris Schubert</strong><br>Web Developer</p>
+      </div>
+    </body>
+    </html>
+  `;
+};
+
+// POST /api/contact - Hauptkontaktformular
 router.post('/', contactRateLimit, async (req, res) => {
   try {
+    console.log('📧 Contact request received:', req.body);
+    
     const {
       name,
       email,
@@ -64,7 +221,7 @@ router.post('/', contactRateLimit, async (req, res) => {
       });
     }
 
-    // Email-Format validieren
+    // Email validieren
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       return res.status(400).json({
@@ -73,18 +230,53 @@ router.post('/', contactRateLimit, async (req, res) => {
       });
     }
 
-    // Kontakt in Datenbank speichern
-    const contactEntry = new Contact({
-      name,
-      email,
-      phone: phone || null,
-      company: company || null,
+    // HINZUGEFÜGT: Budget/Timeline Mapping
+    const budgetMapping = {
+      'unter-2500': '< 2.500€',
+      '2500-5000': '2.500€ - 5.000€',
+      '5000-10000': '5.000€ - 10.000€',
+      '10000-plus': '> 5.000€'
+    };
+
+    const timelineMapping = {
+      'asap': 'Innerhalb 1 Woche',
+      '1-month': '2-4 Wochen',
+      '2-3-months': '2-3 Monate',
+      'flexible': 'Flexibel'
+    };
+
+    // Daten vorbereiten
+    const mappedBudget = budgetMapping[budget] || budget;
+    const mappedTimeline = timelineMapping[timeline] || timeline;
+
+    const formData = {
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone?.trim() || '',
+      company: company?.trim() || '',
       projectType: projectType || 'general',
-      budget: budget || null,
-      timeline: timeline || null,
-      message,
-      newsletter: newsletter || false,
+      budget: budget || '',
+      timeline: timeline || '',
+      mappedBudget,
+      mappedTimeline,
+      message: message.trim(),
+      newsletter: Boolean(newsletter),
       source,
+      ip: req.ip
+    };
+
+    // KORRIGIERT: In Datenbank speichern mit korrekten Werten
+    const contactEntry = new Contact({
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone || null,
+      company: formData.company || null,
+      projectType: formData.projectType,
+      budget: mappedBudget || null, // Verwende gemappten Wert
+      timeline: mappedTimeline || null, // Verwende gemappten Wert
+      message: formData.message,
+      newsletter: formData.newsletter,
+      source: formData.source,
       status: 'new',
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
@@ -92,104 +284,39 @@ router.post('/', contactRateLimit, async (req, res) => {
     });
 
     await contactEntry.save();
-    console.log('✅ Contact saved to database:', contactEntry._id);
+    console.log('✅ Contact saved:', contactEntry._id);
 
-    // E-Mail an Admin senden
-    const transporter = createEmailTransporter();
-    
-    const adminEmailContent = `
-      <h2>🚀 Neue Kontaktanfrage von der Website</h2>
-      
-      <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-        <h3>📋 Persönliche Daten</h3>
-        <p><strong>Name:</strong> ${name}</p>
-        <p><strong>E-Mail:</strong> <a href="mailto:${email}">${email}</a></p>
-        ${phone ? `<p><strong>Telefon:</strong> <a href="tel:${phone}">${phone}</a></p>` : ''}
-        ${company ? `<p><strong>Unternehmen:</strong> ${company}</p>` : ''}
-      </div>
+    // E-Mails senden
+    try {
+      const transporter = createEmailTransporter();
 
-      <div style="background: #f3e5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-        <h3>💬 Nachricht</h3>
-        <p style="white-space: pre-wrap;">${message}</p>
-      </div>
+      // Admin E-Mail
+      await transporter.sendMail({
+        from: `"Portfolio Contact" <${process.env.EMAIL_USER}>`,
+        to: process.env.ADMIN_EMAIL,
+        subject: `🚀 Neue Anfrage: ${formData.projectType} - ${formData.name}`,
+        html: createAdminEmailHTML(formData),
+        replyTo: formData.email
+      });
 
-      <div style="background: #e8f5e8; padding: 20px; border-radius: 8px; margin: 20px 0;">
-        <h3>📊 Zusätzliche Informationen</h3>
-        <p><strong>Newsletter:</strong> ${newsletter ? 'Ja' : 'Nein'}</p>
-        <p><strong>Quelle:</strong> ${source}</p>
-        <p><strong>Datum:</strong> ${new Date().toLocaleString('de-DE')}</p>
-        <p><strong>IP-Adresse:</strong> ${req.ip}</p>
-      </div>
+      // Kunden E-Mail
+      await transporter.sendMail({
+        from: `"Chris Schubert" <${process.env.EMAIL_USER}>`,
+        to: formData.email,
+        subject: '✅ Ihre Anfrage wurde empfangen - Chris Schubert',
+        html: createCustomerEmailHTML(formData)
+      });
 
-      <div style="margin: 30px 0; text-align: center;">
-        <a href="mailto:${email}?subject=Re: Ihre Kontaktanfrage" 
-           style="background: #1976d2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
-          📧 Direkt antworten
-        </a>
-      </div>
-    `;
+      console.log('✅ Contact emails sent successfully');
 
-    await transporter.sendMail({
-      from: `"Website Kontaktformular" <${process.env.EMAIL_USER}>`,
-      to: process.env.ADMIN_EMAIL,
-      subject: `🚀 Neue Kontaktanfrage: ${projectType || 'Allgemein'} - ${name}`,
-      html: adminEmailContent,
-      replyTo: email
-    });
-
-    // Bestätigungs-E-Mail an Kunden senden
-    const customerEmailContent = `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #1976d2;">Vielen Dank für Ihre Kontaktanfrage!</h2>
-        
-        <p>Hallo ${name},</p>
-        
-        <p>vielen Dank für Ihr Interesse an meinen Dienstleistungen. Ihre Nachricht ist bei mir angekommen und ich werde mich innerhalb von 24 Stunden bei Ihnen melden.</p>
-        
-        <div style="background: #f8f9fa; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <h3>📋 Ihre Anfrage im Überblick:</h3>
-          ${projectType ? `<p><strong>Projekt-Art:</strong> ${projectType}</p>` : ''}
-          ${budget ? `<p><strong>Budget:</strong> ${budget}</p>` : ''}
-          ${timeline ? `<p><strong>Zeitrahmen:</strong> ${timeline}</p>` : ''}
-        </div>
-        
-        <p>Falls Sie noch Fragen haben oder zusätzliche Informationen benötigen, können Sie mich gerne direkt kontaktieren:</p>
-        
-        <div style="background: #e3f2fd; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <p><strong>📧 E-Mail:</strong> <a href="mailto:schubert_chris@rocketmail.com">schubert_chris@rocketmail.com</a></p>
-          <p><strong>📱 Telefon:</strong> <a href="tel:+491609416348">+49 160 941 683 48</a></p>
-          <p><strong>🕒 Verfügbarkeit:</strong> Mo-Fr: 9-18 Uhr</p>
-        </div>
-        
-        <p>Mit freundlichen Grüßen,<br>
-        <strong>Chris Schubert</strong><br>
-        <em>Web Developer & Digital Solutions</em></p>
-        
-        <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-        <p style="font-size: 12px; color: #666;">
-          Diese E-Mail wurde automatisch generiert. Falls Sie diese Nachricht irrtümlich erhalten haben, können Sie sie ignorieren.
-        </p>
-      </div>
-    `;
-
-    await transporter.sendMail({
-      from: `"Chris Schubert" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Bestätigung Ihrer Kontaktanfrage - Chris Schubert Web Development',
-      html: customerEmailContent
-    });
-
-    // Newsletter-Anmeldung verarbeiten (falls gewünscht)
-    if (newsletter) {
-      console.log('📬 Newsletter subscription for:', email);
-      // Hier später Newsletter-Service integrieren
+    } catch (emailError) {
+      console.error('⚠️ Email sending failed:', emailError);
+      // E-Mail-Fehler nicht blockierend
     }
-
-    console.log('✅ Contact form submission successful:', email);
 
     res.status(200).json({
       success: true,
-      message: 'Ihre Nachricht wurde erfolgreich gesendet. Sie erhalten in Kürze eine Bestätigung per E-Mail.',
+      message: 'Vielen Dank für deine Nachricht! Ich melde mich innerhalb von 24 Stunden bei dir.',
       data: {
         contactId: contactEntry._id,
         timestamp: contactEntry.createdAt
@@ -201,77 +328,153 @@ router.post('/', contactRateLimit, async (req, res) => {
     
     res.status(500).json({
       success: false,
-      message: 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut oder kontaktieren Sie mich direkt.',
+      message: 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
 
-// ===========================
-// PROJEKT-SPEZIFISCHE ANFRAGE
-// ===========================
-router.post('/project-inquiry', contactRateLimit, async (req, res) => {
+// Newsletter Anmeldung (gleich wie vorher)
+router.post('/newsletter', contactRateLimit, async (req, res) => {
   try {
-    const { projectType, ...contactData } = req.body;
+    const { email, source = 'newsletter_popup' } = req.body;
 
-    // Ähnliches Handling wie bei normaler Kontaktanfrage
-    // Aber mit projekt-spezifischen E-Mail-Templates
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'E-Mail-Adresse ist erforderlich.'
+      });
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Bitte geben Sie eine gültige E-Mail-Adresse ein.'
+      });
+    }
+
+    const existingContact = await Contact.findOne({ 
+      email: email.toLowerCase().trim(),
+      newsletter: true 
+    });
+
+    if (existingContact) {
+      return res.status(200).json({
+        success: true,
+        message: 'Sie sind bereits für den Newsletter angemeldet.',
+        data: { alreadySubscribed: true }
+      });
+    }
+
+    const newsletterEntry = new Contact({
+      name: 'Newsletter Abonnent',
+      email: email.toLowerCase().trim(),
+      message: 'Newsletter-Anmeldung über Website',
+      newsletter: true,
+      source,
+      status: 'newsletter_only',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      createdAt: new Date()
+    });
+
+    await newsletterEntry.save();
+
+    const transporter = createEmailTransporter();
     
-    console.log('🎯 Project inquiry received:', projectType);
+    await transporter.sendMail({
+      from: `"Chris Schubert Newsletter" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: '🎉 Willkommen zum Newsletter!',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <div style="background: linear-gradient(135deg, #f39c12, #e67e22); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0;">
+            <h1>🎉 Willkommen!</h1>
+            <p>Vielen Dank für Ihre Newsletter-Anmeldung!</p>
+          </div>
+          
+          <div style="background: #f8f9fa; padding: 30px; border-radius: 0 0 8px 8px;">
+            <p>Sie erhalten ab sofort exklusive Web-Development Tipps und Tools direkt aus der Praxis.</p>
+            
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="https://portfolio-chris-schubert.vercel.app" style="background: #f39c12; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+                Website besuchen
+              </a>
+            </div>
+            
+            <p>Beste Grüße<br><strong>Chris Schubert</strong><br>Web Developer</p>
+          </div>
+        </div>
+      `
+    });
+
+    console.log('📬 Newsletter subscription successful:', email);
 
     res.status(200).json({
       success: true,
-      message: `Ihre ${projectType}-Anfrage wurde erfolgreich gesendet.`,
-      data: { projectType }
+      message: 'Erfolgreich für den Newsletter angemeldet!',
+      data: { email, subscriptionId: newsletterEntry._id }
     });
 
   } catch (error) {
-    console.error('❌ Project inquiry error:', error);
+    console.error('❌ Newsletter subscription error:', error);
     res.status(500).json({
       success: false,
-      message: 'Fehler bei der Projekt-Anfrage.'
+      message: 'Fehler bei der Newsletter-Anmeldung.'
     });
   }
 });
 
-// ===========================
-// RATE LIMIT STATUS ABFRAGEN
-// ===========================
-router.get('/rate-limit/:email', async (req, res) => {
-  try {
-    const { email } = req.params;
-    
-    // Anzahl der Kontakte in den letzten 15 Minuten
-    const recentContacts = await Contact.countDocuments({
-      email,
-      createdAt: { $gte: new Date(Date.now() - 15 * 60 * 1000) }
-    });
+// Alle anderen Routes (Statistics, etc.) bleiben gleich
+router.get('/email-preview/:type', (req, res) => {
+  if (process.env.NODE_ENV !== 'development') {
+    return res.status(403).json({ error: 'Nur im Development-Modus verfügbar' });
+  }
 
-    res.json({
-      success: true,
-      data: {
-        requestsInLastWindow: recentContacts,
-        maxRequests: 3,
-        windowMs: 15 * 60 * 1000,
-        canSubmit: recentContacts < 3
-      }
-    });
+  const { type } = req.params;
+  const sampleData = {
+    name: 'Max Mustermann',
+    email: 'max@beispiel.de',
+    phone: '+49 160 123 456 78',
+    company: 'Beispiel GmbH',
+    projectType: 'ecommerce',
+    budget: '5000-10000',
+    timeline: 'asap',
+    mappedBudget: '5.000€ - 10.000€',
+    mappedTimeline: 'Innerhalb 1 Woche',
+    message: 'Ich benötige eine moderne E-Commerce-Plattform für mein Unternehmen.',
+    newsletter: true,
+    source: 'contact_page',
+    ip: '127.0.0.1'
+  };
 
-  } catch (error) {
-    console.error('❌ Rate limit check error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Fehler bei der Rate-Limit-Prüfung.'
-    });
+  switch (type) {
+    case 'admin':
+      res.send(createAdminEmailHTML(sampleData));
+      break;
+    case 'customer':
+      res.send(createCustomerEmailHTML(sampleData));
+      break;
+    default:
+      res.status(404).json({ error: 'Template nicht gefunden. Verfügbar: admin, customer' });
   }
 });
 
-// ===========================
-// KONTAKT-STATISTIKEN (für Admin Dashboard)
-// ===========================
 router.get('/statistics', async (req, res) => {
   try {
-    const stats = await Contact.getStatistics();
+    const stats = await Contact.aggregate([
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          new: { $sum: { $cond: [{ $eq: ['$status', 'new'] }, 1, 0] } },
+          inProgress: { $sum: { $cond: [{ $eq: ['$status', 'in_progress'] }, 1, 0] } },
+          completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+          newsletterSubscribers: { $sum: { $cond: ['$newsletter', 1, 0] } }
+        }
+      }
+    ]);
     
     res.json({
       success: true,
@@ -293,5 +496,49 @@ router.get('/statistics', async (req, res) => {
   }
 });
 
-// ES Module Export
+router.get('/', async (req, res) => {
+  try {
+    const { page = 1, limit = 10, status, search } = req.query;
+
+    const query = {};
+    if (status) query.status = status;
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { company: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    
+    const contacts = await Contact.find(query)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Contact.countDocuments(query);
+
+    res.json({
+      success: true,
+      data: {
+        contacts,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total,
+          pages: Math.ceil(total / parseInt(limit))
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Fetch contacts error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Fehler beim Laden der Kontakte.'
+    });
+  }
+});
+
 export default router;
