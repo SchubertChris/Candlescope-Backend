@@ -1,40 +1,32 @@
 // server.js
-// server.js - KORRIGIERT: OAuth-Routes richtig registrieren
+// KORRIGIERT: Newsletter-Routes Integration in bestehende Server-Struktur
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import passport from './config/passport.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-// Route-Imports
+// Route-Imports (bestehende + neue)
 import authRoutes from './routes/auth.js';
 import contactRoutes from './routes/contact.js';
 import dashboardRoutes from './routes/dashboard.js';
-import oauthRoutes from './routes/oauth.js'; // HINZUGEFÜGT: OAuth-Routes importieren
+import oauthRoutes from './routes/oauth.js';
 
-import path from 'path';
-import { fileURLToPath } from 'url';
+// NEU: Newsletter Routes
+import newsletterRoutes from './routes/newsletter.js';
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(passport.initialize()); // KORRIGIERT: Passport initialisieren
-
-// KORRIGIERT: Routes in richtiger Reihenfolge registrieren
-app.use('/api/auth', authRoutes);
-app.use('/api/oauth', oauthRoutes); // HINZUGEFÜGT: OAuth-Routes registrieren
-app.use('/api/contact', contactRoutes);
-app.use('/api/dashboard', dashboardRoutes);
-
 // ES Module Setup
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-// CORS-Konfiguration
+
+// CORS-Konfiguration (bestehend + erweitert)
 const corsOptions = {
   origin: [
     'http://localhost:5173',  // Vite dev server
@@ -60,6 +52,14 @@ const corsOptions = {
 // Middleware
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (req, res, buf) => {
+    req.rawBody = buf;
+  }
+}));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(passport.initialize()); // Passport initialisieren
 
 // Security Headers
 app.use((req, res, next) => {
@@ -68,15 +68,6 @@ app.use((req, res, next) => {
   res.header('X-XSS-Protection', '1; mode=block');
   next();
 });
-
-// Body Parser
-app.use(express.json({ 
-  limit: '10mb',
-  verify: (req, res, buf) => {
-    req.rawBody = buf;
-  }
-}));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Request Logging für Development
 if (process.env.NODE_ENV === 'development') {
@@ -93,7 +84,7 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// KORRIGIERT: Database Connection mit gültigen MongoDB-Optionen
+// Database Connection
 const connectDB = async () => {
   try {
     console.log('\n🔄 CONNECTING TO DATABASE...');
@@ -103,13 +94,11 @@ const connectDB = async () => {
       throw new Error('MONGODB_URI environment variable is not set');
     }
     
-    // KORRIGIERT: Entfernt ungültige bufferMaxEntries Option
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       useNewUrlParser: true,
       useUnifiedTopology: true,
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000
-      // ENTFERNT: bufferCommands und bufferMaxEntries (nicht mehr unterstützt)
     });
     
     console.log('✅ DATABASE CONNECTED SUCCESSFULLY');
@@ -140,7 +129,7 @@ const connectDB = async () => {
 // Database verbinden
 await connectDB();
 
-// Health Check Route
+// Health Check Route (erweitert mit Newsletter)
 app.get('/health', (req, res) => {
   const dbState = mongoose.connection.readyState;
   const dbStatus = {
@@ -162,13 +151,14 @@ app.get('/health', (req, res) => {
     },
     services: {
       email: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS),
-      mongodb: dbState === 1
+      mongodb: dbState === 1,
+      newsletter: true // NEU: Newsletter Service verfügbar
     },
     version: process.env.APP_VERSION || '1.0.0'
   });
 });
 
-// API Info Route
+// API Info Route (erweitert mit Newsletter)
 app.get('/', (req, res) => {
   res.json({
     message: 'Portfolio Backend API - Chris Schubert',
@@ -177,13 +167,19 @@ app.get('/', (req, res) => {
     endpoints: {
       health: '/health',
       contact: '/api/contact',
+      dashboard: '/api/dashboard',
+      auth: '/api/auth',
+      oauth: '/api/oauth',
+      newsletter: '/api/newsletter', // NEU: Newsletter Endpoints
       contactTest: '/api/contact/test',
       emailTest: '/api/contact/test-email',
       dbTest: '/api/contact/test-db'
     },
     documentation: {
       contact_form: 'POST /api/contact',
-      newsletter: 'POST /api/contact/newsletter',
+      newsletter_signup: 'POST /api/newsletter/subscribe',
+      newsletter_admin: 'GET /api/newsletter/* (Admin Auth Required)',
+      dashboard: 'GET /api/dashboard/* (Auth Required)',
       health_check: 'GET /health'
     },
     cors: {
@@ -194,10 +190,77 @@ app.get('/', (req, res) => {
   });
 });
 
-// API Routes
+// Routes Registration (bestehende + Newsletter)
+app.use('/api/auth', authRoutes);
+app.use('/api/oauth', oauthRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/dashboard', dashboardRoutes);
 
-// Development Debug Routes
+// NEU: Newsletter Routes
+app.use('/api/newsletter', newsletterRoutes);
+
+// NEU: Newsletter Tracking Endpoints (Special Routes)
+// Newsletter Open Tracking (Pixel)
+app.get('/api/newsletter/track/open/:subscriberId/:newsletterId', async (req, res) => {
+  try {
+    const { subscriberId, newsletterId } = req.params;
+    
+    // Import Newsletter Service dynamisch
+    const { default: newsletterService } = await import('./services/newsletter.service.js');
+    
+    // Track Email Open
+    await newsletterService.trackEmailOpen(subscriberId, newsletterId);
+    
+    // 1x1 transparentes Pixel zurückgeben
+    const pixel = Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
+      'base64'
+    );
+    
+    res.writeHead(200, {
+      'Content-Type': 'image/png',
+      'Content-Length': pixel.length,
+      'Cache-Control': 'no-cache, no-store, must-revalidate'
+    });
+    res.end(pixel);
+    
+  } catch (error) {
+    console.error('❌ Newsletter open tracking error:', error);
+    // Auch bei Fehlern Pixel zurückgeben
+    const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
+    res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': pixel.length });
+    res.end(pixel);
+  }
+});
+
+// Newsletter Click Tracking (Redirect)
+app.get('/api/newsletter/track/click/:subscriberId/:newsletterId', async (req, res) => {
+  try {
+    const { subscriberId, newsletterId } = req.params;
+    const { url } = req.query;
+    
+    if (!url) {
+      return res.status(400).json({ error: 'URL parameter required' });
+    }
+    
+    // Import Newsletter Service dynamisch
+    const { default: newsletterService } = await import('./services/newsletter.service.js');
+    
+    // Track Email Click
+    await newsletterService.trackEmailClick(subscriberId, newsletterId, url);
+    
+    // Redirect zu Original-URL
+    res.redirect(decodeURIComponent(url));
+    
+  } catch (error) {
+    console.error('❌ Newsletter click tracking error:', error);
+    // Bei Fehler trotzdem weiterleiten
+    const fallbackUrl = req.query.url || process.env.FRONTEND_URL || 'https://portfolio-chris-schubert.vercel.app';
+    res.redirect(decodeURIComponent(fallbackUrl));
+  }
+});
+
+// Development Debug Routes (erweitert)
 if (process.env.NODE_ENV === 'development') {
   app.get('/debug/env', (req, res) => {
     res.json({
@@ -208,7 +271,15 @@ if (process.env.NODE_ENV === 'development') {
       has_email_user: !!process.env.EMAIL_USER,
       has_email_pass: !!process.env.EMAIL_PASS,
       admin_email: process.env.ADMIN_EMAIL,
-      session_secret: !!process.env.SESSION_SECRET
+      session_secret: !!process.env.SESSION_SECRET,
+      has_newsletter: true, // NEU: Newsletter Debug Info
+      newsletter_features: {
+        subscriber_management: true,
+        template_editor: true,
+        email_tracking: true,
+        scheduled_sending: true,
+        double_opt_in: true
+      }
     });
   });
 
@@ -246,13 +317,14 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// 404 Handler
+// 404 Handler (KORRIGIERT)
 app.use('*', (req, res) => {
   console.log(`❌ 404 - Route not found: ${req.method} ${req.originalUrl}`);
   console.log('📍 Available routes:');
   console.log('   GET  / - API Info');
   console.log('   GET  /health - Health Check');
   console.log('   POST /api/contact - Contact Form');
+  console.log('   ALL  /api/newsletter/* - Newsletter API');
   if (process.env.NODE_ENV === 'development') {
     console.log('   GET  /debug/env - Environment Variables');
     console.log('   GET  /api/contact/test - Contact Test');
@@ -269,6 +341,10 @@ app.use('*', (req, res) => {
       'GET /health',
       'POST /api/contact',
       'POST /api/contact/newsletter',
+      'ALL /api/newsletter/*',
+      'ALL /api/dashboard/*',
+      'ALL /api/auth/*',
+      'ALL /api/oauth/*',
       ...(process.env.NODE_ENV === 'development' ? [
         'GET /debug/env',
         'POST /api/contact/test',
@@ -281,7 +357,7 @@ app.use('*', (req, res) => {
   });
 });
 
-// Global Error Handler
+// Global Error Handler (erweitert mit Newsletter-Fehlern)
 app.use((error, req, res, next) => {
   console.error('\n❌ GLOBAL ERROR HANDLER TRIGGERED:');
   console.error('📍 Error Type:', error.constructor.name);
@@ -321,6 +397,9 @@ app.use((error, req, res, next) => {
   } else if (error.message?.includes('CORS')) {
     statusCode = 403;
     message = 'CORS policy violation';
+  } else if (error.name === 'NewsletterError') { // NEU: Newsletter-spezifische Fehler
+    statusCode = 400;
+    message = 'Newsletter Error: ' + error.message;
   }
   
   res.status(statusCode).json({
@@ -339,7 +418,7 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Server Start
+// Server Start (erweitert mit Newsletter-Dokumentation)
 const server = app.listen(PORT, () => {
   console.log('\n🚀 SERVER STARTED SUCCESSFULLY');
   console.log('=' .repeat(60));
@@ -347,12 +426,29 @@ const server = app.listen(PORT, () => {
   console.log(`🌐 Server running on: http://localhost:${PORT}`);
   console.log(`📊 Database: ${mongoose.connection.readyState === 1 ? 'Connected ✅' : 'Disconnected ❌'}`);
   console.log(`📧 Email Service: ${(process.env.EMAIL_USER && process.env.EMAIL_PASS) ? 'Configured ✅' : 'NOT CONFIGURED ❌'}`);
+  console.log(`📬 Newsletter Service: Enabled ✅`); // NEU: Newsletter Status
   
   console.log('\n📚 Available endpoints:');
   console.log(`   GET  http://localhost:${PORT}/                    - API Info`);
   console.log(`   GET  http://localhost:${PORT}/health             - Health Check`);
   console.log(`   POST http://localhost:${PORT}/api/contact        - Contact Form`);
-  console.log(`   POST http://localhost:${PORT}/api/contact/newsletter - Newsletter`);
+  console.log(`   POST http://localhost:${PORT}/api/contact/newsletter - Newsletter Signup (Legacy)`);
+  console.log(`   ALL  http://localhost:${PORT}/api/dashboard/*    - Dashboard API (Auth Required)`);
+  console.log(`   ALL  http://localhost:${PORT}/api/auth/*         - Authentication`);
+  console.log(`   ALL  http://localhost:${PORT}/api/oauth/*        - OAuth Authentication`);
+  
+  // NEU: Newsletter Endpoints Documentation
+  console.log('\n📬 Newsletter endpoints:');
+  console.log(`   POST http://localhost:${PORT}/api/newsletter/subscribe        - Public Newsletter Signup`);
+  console.log(`   GET  http://localhost:${PORT}/api/newsletter/confirm/:token   - Email Confirmation`);
+  console.log(`   GET  http://localhost:${PORT}/api/newsletter/unsubscribe/:token - Unsubscribe`);
+  console.log(`   GET  http://localhost:${PORT}/api/newsletter/subscribers      - Admin: Get Subscribers`);
+  console.log(`   POST http://localhost:${PORT}/api/newsletter/subscribers      - Admin: Add Subscriber`);
+  console.log(`   GET  http://localhost:${PORT}/api/newsletter/templates        - Admin: Get Templates`);
+  console.log(`   POST http://localhost:${PORT}/api/newsletter/templates        - Admin: Create Template`);
+  console.log(`   GET  http://localhost:${PORT}/api/newsletter/stats            - Admin: Statistics`);
+  console.log(`   GET  http://localhost:${PORT}/api/newsletter/track/open/:sub/:news - Email Open Tracking`);
+  console.log(`   GET  http://localhost:${PORT}/api/newsletter/track/click/:sub/:news - Email Click Tracking`);
   
   if (process.env.NODE_ENV === 'development') {
     console.log('\n🛠️  Development endpoints:');
@@ -405,6 +501,7 @@ const server = app.listen(PORT, () => {
   console.log(`\n🎯 Frontend should connect to: http://localhost:${PORT}/api`);
   console.log(`🔗 Test contact form: curl -X POST http://localhost:${PORT}/api/contact/test`);
   console.log(`🔗 Test health check: curl http://localhost:${PORT}/health`);
+  console.log(`📬 Test newsletter signup: curl -X POST http://localhost:${PORT}/api/newsletter/subscribe -H "Content-Type: application/json" -d '{"email":"test@example.com"}'`);
   console.log('\n✨ Ready to receive requests!\n');
 });
 
