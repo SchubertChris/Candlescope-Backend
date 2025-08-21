@@ -1,25 +1,39 @@
 // server.js
-// VOLLSTÄNDIGE SERVER-DATEI: Korrigierte MongoDB-Optionen + Alle Features
+// server.js - KORRIGIERT: OAuth-Routes richtig registrieren
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import passport from './config/passport.js';
+
+// Route-Imports
+import authRoutes from './routes/auth.js';
+import contactRoutes from './routes/contact.js';
+import dashboardRoutes from './routes/dashboard.js';
+import oauthRoutes from './routes/oauth.js'; // HINZUGEFÜGT: OAuth-Routes importieren
+
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Routes
-import contactRoutes from './routes/contact.js';
-
-// ES Module Setup
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Environment laden
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Middleware
+app.use(cors());
+app.use(express.json());
+app.use(passport.initialize()); // KORRIGIERT: Passport initialisieren
+
+// KORRIGIERT: Routes in richtiger Reihenfolge registrieren
+app.use('/api/auth', authRoutes);
+app.use('/api/oauth', oauthRoutes); // HINZUGEFÜGT: OAuth-Routes registrieren
+app.use('/api/contact', contactRoutes);
+app.use('/api/dashboard', dashboardRoutes);
+
+// ES Module Setup
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 // CORS-Konfiguration
 const corsOptions = {
   origin: [
