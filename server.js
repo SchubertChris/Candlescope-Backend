@@ -1,5 +1,5 @@
 // server.js
-// KORRIGIERT: Newsletter-Routes Integration in bestehende Server-Struktur
+// VOLLSTÄNDIGE SERVER-DATEI mit Admin-Account Auto-Creation
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
@@ -8,13 +8,11 @@ import passport from './config/passport.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
-// Route-Imports (bestehende + neue)
+// Route-Imports
 import authRoutes from './routes/auth.js';
 import contactRoutes from './routes/contact.js';
 import dashboardRoutes from './routes/dashboard.js';
 import oauthRoutes from './routes/oauth.js';
-
-// NEU: Newsletter Routes
 import newsletterRoutes from './routes/newsletter.js';
 
 dotenv.config();
@@ -26,7 +24,7 @@ const PORT = process.env.PORT || 5000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// CORS-Konfiguration (bestehend + erweitert)
+// CORS-Konfiguration
 const corsOptions = {
   origin: [
     'http://localhost:5173',  // Vite dev server
@@ -59,7 +57,7 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(passport.initialize()); // Passport initialisieren
+app.use(passport.initialize());
 
 // Security Headers
 app.use((req, res, next) => {
@@ -126,39 +124,97 @@ const connectDB = async () => {
   }
 };
 
-// Database verbinden
-await connectDB();
+// ADMIN ACCOUNT AUTO-CREATION
+const ensureAdminAccount = async () => {
+  try {
+    console.log('\n👑 CHECKING ADMIN ACCOUNT...');
+    
+    const adminEmail = process.env.ADMIN_EMAIL;
+    const adminPassword = process.env.ADMIN_PASSWORD;
+    
+    if (!adminEmail || !adminPassword) {
+      console.warn('⚠️ ADMIN_EMAIL or ADMIN_PASSWORD not set in .env');
+      console.warn('   Add these to .env for auto-admin creation:');
+      console.warn('   ADMIN_EMAIL=schubert_chris@rocketmail.com');
+      console.warn('   ADMIN_PASSWORD=dD0DeO$KBBO9');
+      return;
+    }
+    
+    console.log('📧 Admin Email from .env:', adminEmail);
+    
+    // Dynamic imports nach DB-Connection
+    const { default: User } = await import('./models/User/User.js');
+    const { default: bcrypt } = await import('bcrypt');
+    
+    // Prüfen ob Admin bereits existiert
+    let adminUser = await User.findOne({ email: adminEmail });
+    
+    if (adminUser) {
+      console.log('✅ ADMIN ACCOUNT EXISTS');
+      console.log('   - Email:', adminUser.email);
+      console.log('   - Role:', adminUser.role);
+      console.log('   - Created:', adminUser.createdAt);
+      
+      // Sicherstellen dass Rolle 'admin' ist
+      if (adminUser.role !== 'admin') {
+        adminUser.role = 'admin';
+        await adminUser.save();
+        console.log('✅ ADMIN ROLE UPDATED TO: admin');
+      }
+      
+      return adminUser;
+    }
+    
+    // Admin-Account erstellen
+    console.log('🆕 CREATING NEW ADMIN ACCOUNT...');
+    console.log('   - Email:', adminEmail);
+    console.log('   - Password: [FROM .env ADMIN_PASSWORD]');
+    
+    const hashedPassword = await bcrypt.hash(adminPassword, 10);
+    
+    adminUser = new User({
+      email: adminEmail.toLowerCase().trim(),
+      password: hashedPassword,
+      role: 'admin',
+      firstName: 'Chris',
+      lastName: 'Schubert', 
+      company: 'Chris Schubert - Web Development',
+      isEmailVerified: true,
+      isActive: true,
+      authProvider: 'local',
+      createdAt: new Date(),
+      lastLogin: new Date()
+    });
+    
+    const savedAdmin = await adminUser.save();
+    
+    console.log('✅ ADMIN ACCOUNT CREATED SUCCESSFULLY!');
+    console.log('   - User ID:', savedAdmin._id);
+    console.log('   - Email:', savedAdmin.email);
+    console.log('   - Role:', savedAdmin.role);
+    console.log('   - Name:', savedAdmin.firstName, savedAdmin.lastName);
+    console.log('   - Company:', savedAdmin.company);
+    console.log('🔑 LOGIN CREDENTIALS:');
+    console.log('   - Email:', adminEmail);
+    console.log('   - Password: [Check .env ADMIN_PASSWORD]');
+    
+    return savedAdmin;
+    
+  } catch (error) {
+    console.error('❌ ADMIN ACCOUNT CREATION ERROR:', error);
+    console.error('   - Error Name:', error.name);
+    console.error('   - Error Message:', error.message);
+    
+    if (error.code === 11000) {
+      console.error('   - Duplicate key error - admin might already exist with different case');
+    }
+    
+    // Nicht kritisch - Server kann trotzdem starten
+    console.log('⚠️ Server continues without admin auto-creation');
+  }
+};
 
-// Health Check Route (erweitert mit Newsletter)
-app.get('/health', (req, res) => {
-  const dbState = mongoose.connection.readyState;
-  const dbStatus = {
-    0: 'disconnected',
-    1: 'connected',
-    2: 'connecting',
-    3: 'disconnecting'
-  };
-
-  res.json({
-    status: 'ok',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
-    port: PORT,
-    database: {
-      state: dbStatus[dbState] || 'unknown',
-      name: mongoose.connection.name,
-      host: mongoose.connection.host
-    },
-    services: {
-      email: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS),
-      mongodb: dbState === 1,
-      newsletter: true // NEU: Newsletter Service verfügbar
-    },
-    version: process.env.APP_VERSION || '1.0.0'
-  });
-});
-
-// API Info Route (erweitert mit Newsletter)
+// API Info Route
 app.get('/', (req, res) => {
   res.json({
     message: 'Portfolio Backend API - Chris Schubert',
@@ -170,7 +226,7 @@ app.get('/', (req, res) => {
       dashboard: '/api/dashboard',
       auth: '/api/auth',
       oauth: '/api/oauth',
-      newsletter: '/api/newsletter', // NEU: Newsletter Endpoints
+      newsletter: '/api/newsletter',
       contactTest: '/api/contact/test',
       emailTest: '/api/contact/test-email',
       dbTest: '/api/contact/test-db'
@@ -180,7 +236,8 @@ app.get('/', (req, res) => {
       newsletter_signup: 'POST /api/newsletter/subscribe',
       newsletter_admin: 'GET /api/newsletter/* (Admin Auth Required)',
       dashboard: 'GET /api/dashboard/* (Auth Required)',
-      health_check: 'GET /health'
+      health_check: 'GET /health',
+      admin_login: 'POST /api/auth/login (Use ADMIN_EMAIL/ADMIN_PASSWORD from .env)'
     },
     cors: {
       origins: corsOptions.origin,
@@ -190,28 +247,22 @@ app.get('/', (req, res) => {
   });
 });
 
-// Routes Registration (bestehende + Newsletter)
+// Routes Registration
 app.use('/api/auth', authRoutes);
 app.use('/api/oauth', oauthRoutes);
 app.use('/api/contact', contactRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-
-// NEU: Newsletter Routes
 app.use('/api/newsletter', newsletterRoutes);
 
-// NEU: Newsletter Tracking Endpoints (Special Routes)
-// Newsletter Open Tracking (Pixel)
+// Newsletter Tracking Endpoints
 app.get('/api/newsletter/track/open/:subscriberId/:newsletterId', async (req, res) => {
   try {
     const { subscriberId, newsletterId } = req.params;
     
-    // Import Newsletter Service dynamisch
     const { default: newsletterService } = await import('./services/newsletter.service.js');
-    
-    // Track Email Open
     await newsletterService.trackEmailOpen(subscriberId, newsletterId);
     
-    // 1x1 transparentes Pixel zurückgeben
+    // 1x1 transparentes Pixel
     const pixel = Buffer.from(
       'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==',
       'base64'
@@ -226,14 +277,12 @@ app.get('/api/newsletter/track/open/:subscriberId/:newsletterId', async (req, re
     
   } catch (error) {
     console.error('❌ Newsletter open tracking error:', error);
-    // Auch bei Fehlern Pixel zurückgeben
     const pixel = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==', 'base64');
     res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': pixel.length });
     res.end(pixel);
   }
 });
 
-// Newsletter Click Tracking (Redirect)
 app.get('/api/newsletter/track/click/:subscriberId/:newsletterId', async (req, res) => {
   try {
     const { subscriberId, newsletterId } = req.params;
@@ -243,24 +292,19 @@ app.get('/api/newsletter/track/click/:subscriberId/:newsletterId', async (req, r
       return res.status(400).json({ error: 'URL parameter required' });
     }
     
-    // Import Newsletter Service dynamisch
     const { default: newsletterService } = await import('./services/newsletter.service.js');
-    
-    // Track Email Click
     await newsletterService.trackEmailClick(subscriberId, newsletterId, url);
     
-    // Redirect zu Original-URL
     res.redirect(decodeURIComponent(url));
     
   } catch (error) {
     console.error('❌ Newsletter click tracking error:', error);
-    // Bei Fehler trotzdem weiterleiten
     const fallbackUrl = req.query.url || process.env.FRONTEND_URL || 'https://portfolio-chris-schubert.vercel.app';
     res.redirect(decodeURIComponent(fallbackUrl));
   }
 });
 
-// Development Debug Routes (erweitert)
+// Development Debug Routes
 if (process.env.NODE_ENV === 'development') {
   app.get('/debug/env', (req, res) => {
     res.json({
@@ -271,8 +315,11 @@ if (process.env.NODE_ENV === 'development') {
       has_email_user: !!process.env.EMAIL_USER,
       has_email_pass: !!process.env.EMAIL_PASS,
       admin_email: process.env.ADMIN_EMAIL,
+      has_admin_password: !!process.env.ADMIN_PASSWORD,
       session_secret: !!process.env.SESSION_SECRET,
-      has_newsletter: true, // NEU: Newsletter Debug Info
+      has_newsletter: true,
+      oauth_google: !!process.env.GOOGLE_CLIENT_ID,
+      oauth_github: !!process.env.GITHUB_CLIENT_ID,
       newsletter_features: {
         subscriber_management: true,
         template_editor: true,
@@ -305,7 +352,7 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// Static files (für Production)
+// Static files (Production)
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, 'public')));
   
@@ -317,7 +364,44 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// 404 Handler (KORRIGIERT)
+// Health Check Route
+app.get('/health', (req, res) => {
+  const dbState = mongoose.connection.readyState;
+  const dbStatus = {
+    0: 'disconnected',
+    1: 'connected',
+    2: 'connecting',
+    3: 'disconnecting'
+  };
+
+  res.json({
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV,
+    port: PORT,
+    database: {
+      state: dbStatus[dbState] || 'unknown',
+      name: mongoose.connection.name,
+      host: mongoose.connection.host
+    },
+    services: {
+      email: !!(process.env.EMAIL_USER && process.env.EMAIL_PASS),
+      mongodb: dbState === 1,
+      newsletter: true,
+      oauth: {
+        google: !!process.env.GOOGLE_CLIENT_ID,
+        github: !!process.env.GITHUB_CLIENT_ID
+      }
+    },
+    admin: {
+      auto_creation: !!(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD),
+      email: process.env.ADMIN_EMAIL ? 'configured' : 'not configured'
+    },
+    version: process.env.APP_VERSION || '1.0.0'
+  });
+});
+
+// 404 Handler
 app.use('*', (req, res) => {
   console.log(`❌ 404 - Route not found: ${req.method} ${req.originalUrl}`);
   console.log('📍 Available routes:');
@@ -325,9 +409,10 @@ app.use('*', (req, res) => {
   console.log('   GET  /health - Health Check');
   console.log('   POST /api/contact - Contact Form');
   console.log('   ALL  /api/newsletter/* - Newsletter API');
+  console.log('   POST /api/auth/login - Login (use ADMIN_EMAIL/ADMIN_PASSWORD)');
   if (process.env.NODE_ENV === 'development') {
     console.log('   GET  /debug/env - Environment Variables');
-    console.log('   GET  /api/contact/test - Contact Test');
+    console.log('   POST /api/contact/test - Contact Test');
     console.log('   GET  /api/contact/test-email - Email Test');
   }
   
@@ -341,6 +426,7 @@ app.use('*', (req, res) => {
       'GET /health',
       'POST /api/contact',
       'POST /api/contact/newsletter',
+      'POST /api/auth/login',
       'ALL /api/newsletter/*',
       'ALL /api/dashboard/*',
       'ALL /api/auth/*',
@@ -357,7 +443,7 @@ app.use('*', (req, res) => {
   });
 });
 
-// Global Error Handler (erweitert mit Newsletter-Fehlern)
+// Global Error Handler
 app.use((error, req, res, next) => {
   console.error('\n❌ GLOBAL ERROR HANDLER TRIGGERED:');
   console.error('📍 Error Type:', error.constructor.name);
@@ -378,10 +464,10 @@ app.use((error, req, res, next) => {
   
   const isDevelopment = process.env.NODE_ENV === 'development';
   
-  // Spezifische Fehlercodes
   let statusCode = error.status || error.statusCode || 500;
   let message = error.message || 'Internal Server Error';
   
+  // Spezifische Fehlercodes
   if (error.name === 'ValidationError') {
     statusCode = 400;
     message = 'Validation Error: ' + error.message;
@@ -397,7 +483,7 @@ app.use((error, req, res, next) => {
   } else if (error.message?.includes('CORS')) {
     statusCode = 403;
     message = 'CORS policy violation';
-  } else if (error.name === 'NewsletterError') { // NEU: Newsletter-spezifische Fehler
+  } else if (error.name === 'NewsletterError') {
     statusCode = 400;
     message = 'Newsletter Error: ' + error.message;
   }
@@ -418,116 +504,124 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Server Start (erweitert mit Newsletter-Dokumentation)
-const server = app.listen(PORT, () => {
-  console.log('\n🚀 SERVER STARTED SUCCESSFULLY');
-  console.log('=' .repeat(60));
-  console.log(`📍 Environment: ${process.env.NODE_ENV}`);
-  console.log(`🌐 Server running on: http://localhost:${PORT}`);
-  console.log(`📊 Database: ${mongoose.connection.readyState === 1 ? 'Connected ✅' : 'Disconnected ❌'}`);
-  console.log(`📧 Email Service: ${(process.env.EMAIL_USER && process.env.EMAIL_PASS) ? 'Configured ✅' : 'NOT CONFIGURED ❌'}`);
-  console.log(`📬 Newsletter Service: Enabled ✅`); // NEU: Newsletter Status
-  
-  console.log('\n📚 Available endpoints:');
-  console.log(`   GET  http://localhost:${PORT}/                    - API Info`);
-  console.log(`   GET  http://localhost:${PORT}/health             - Health Check`);
-  console.log(`   POST http://localhost:${PORT}/api/contact        - Contact Form`);
-  console.log(`   POST http://localhost:${PORT}/api/contact/newsletter - Newsletter Signup (Legacy)`);
-  console.log(`   ALL  http://localhost:${PORT}/api/dashboard/*    - Dashboard API (Auth Required)`);
-  console.log(`   ALL  http://localhost:${PORT}/api/auth/*         - Authentication`);
-  console.log(`   ALL  http://localhost:${PORT}/api/oauth/*        - OAuth Authentication`);
-  
-  // NEU: Newsletter Endpoints Documentation
-  console.log('\n📬 Newsletter endpoints:');
-  console.log(`   POST http://localhost:${PORT}/api/newsletter/subscribe        - Public Newsletter Signup`);
-  console.log(`   GET  http://localhost:${PORT}/api/newsletter/confirm/:token   - Email Confirmation`);
-  console.log(`   GET  http://localhost:${PORT}/api/newsletter/unsubscribe/:token - Unsubscribe`);
-  console.log(`   GET  http://localhost:${PORT}/api/newsletter/subscribers      - Admin: Get Subscribers`);
-  console.log(`   POST http://localhost:${PORT}/api/newsletter/subscribers      - Admin: Add Subscriber`);
-  console.log(`   GET  http://localhost:${PORT}/api/newsletter/templates        - Admin: Get Templates`);
-  console.log(`   POST http://localhost:${PORT}/api/newsletter/templates        - Admin: Create Template`);
-  console.log(`   GET  http://localhost:${PORT}/api/newsletter/stats            - Admin: Statistics`);
-  console.log(`   GET  http://localhost:${PORT}/api/newsletter/track/open/:sub/:news - Email Open Tracking`);
-  console.log(`   GET  http://localhost:${PORT}/api/newsletter/track/click/:sub/:news - Email Click Tracking`);
-  
-  if (process.env.NODE_ENV === 'development') {
-    console.log('\n🛠️  Development endpoints:');
-    console.log(`   POST http://localhost:${PORT}/api/contact/test   - Contact Test`);
-    console.log(`   GET  http://localhost:${PORT}/api/contact/test-email - Email Test`);
-    console.log(`   GET  http://localhost:${PORT}/api/contact/test-db - Database Test`);
-    console.log(`   GET  http://localhost:${PORT}/api/contact/debug-contacts - View Contacts`);
-    console.log(`   GET  http://localhost:${PORT}/debug/env         - Environment Check`);
-    console.log(`   GET  http://localhost:${PORT}/debug/headers     - Headers Debug`);
-    console.log(`   GET  http://localhost:${PORT}/debug/cors-test   - CORS Test`);
-  }
-  
-  console.log('=' .repeat(60));
-  
-  // Environment Validation
-  const requiredEnvVars = [
-    'MONGODB_URI',
-    'EMAIL_USER', 
-    'EMAIL_PASS',
-    'ADMIN_EMAIL'
-  ];
-  
-  const optionalEnvVars = [
-    'SESSION_SECRET',
-    'FRONTEND_URL',
-    'APP_VERSION'
-  ];
-  
-  const missingRequired = requiredEnvVars.filter(varName => !process.env[varName]);
-  const missingOptional = optionalEnvVars.filter(varName => !process.env[varName]);
-  
-  if (missingRequired.length > 0) {
-    console.warn('\n⚠️  CRITICAL: Missing Required Environment Variables:');
-    missingRequired.forEach(varName => {
-      console.warn(`   ❌ ${varName}`);
-    });
-    console.warn('   ⚠️  Some core features will not work!\n');
-  } else {
-    console.log('\n✅ All required environment variables are set');
-  }
-  
-  if (missingOptional.length > 0) {
-    console.log('\n📝 Optional environment variables not set:');
-    missingOptional.forEach(varName => {
-      console.log(`   ⚪ ${varName}`);
-    });
-    console.log('   ℹ️  These features will be disabled.\n');
-  }
-  
-  console.log(`\n🎯 Frontend should connect to: http://localhost:${PORT}/api`);
-  console.log(`🔗 Test contact form: curl -X POST http://localhost:${PORT}/api/contact/test`);
-  console.log(`🔗 Test health check: curl http://localhost:${PORT}/health`);
-  console.log(`📬 Test newsletter signup: curl -X POST http://localhost:${PORT}/api/newsletter/subscribe -H "Content-Type: application/json" -d '{"email":"test@example.com"}'`);
-  console.log('\n✨ Ready to receive requests!\n');
-});
-
-// Graceful Shutdown
-const gracefulShutdown = (signal) => {
-  console.log(`\n📴 ${signal} received. Shutting down gracefully...`);
-  
-  server.close(() => {
-    console.log('🛑 HTTP server closed.');
+// Server Start mit Admin-Account Creation
+const startServer = async () => {
+  try {
+    // 1. Database verbinden
+    await connectDB();
     
-    mongoose.connection.close(false, () => {
-      console.log('💾 Database connection closed.');
-      console.log('✅ Graceful shutdown completed.');
-      process.exit(0);
+    // 2. Admin-Account sicherstellen
+    await ensureAdminAccount();
+    
+    // 3. Server starten
+    const server = app.listen(PORT, () => {
+      console.log('\n🚀 SERVER STARTED SUCCESSFULLY');
+      console.log('=' .repeat(60));
+      console.log(`📍 Environment: ${process.env.NODE_ENV}`);
+      console.log(`🌐 Server running on: http://localhost:${PORT}`);
+      console.log(`📊 Database: ${mongoose.connection.readyState === 1 ? 'Connected ✅' : 'Disconnected ❌'}`);
+      console.log(`📧 Email Service: ${(process.env.EMAIL_USER && process.env.EMAIL_PASS) ? 'Configured ✅' : 'NOT CONFIGURED ❌'}`);
+      console.log(`📬 Newsletter Service: Enabled ✅`);
+      console.log(`👑 Admin Account: ${(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) ? 'Auto-Creation ✅' : 'Manual Setup Required ❌'}`);
+      
+      console.log('\n📚 Available endpoints:');
+      console.log(`   GET  http://localhost:${PORT}/                    - API Info`);
+      console.log(`   GET  http://localhost:${PORT}/health             - Health Check`);
+      console.log(`   POST http://localhost:${PORT}/api/auth/login     - Login (Admin: ${process.env.ADMIN_EMAIL || 'check .env'})`);
+      console.log(`   POST http://localhost:${PORT}/api/contact        - Contact Form`);
+      console.log(`   ALL  http://localhost:${PORT}/api/dashboard/*    - Dashboard API (Auth Required)`);
+      console.log(`   ALL  http://localhost:${PORT}/api/oauth/*        - OAuth Authentication`);
+      
+      console.log('\n📬 Newsletter endpoints:');
+      console.log(`   POST http://localhost:${PORT}/api/newsletter/subscribe        - Public Newsletter Signup`);
+      console.log(`   GET  http://localhost:${PORT}/api/newsletter/subscribers      - Admin: Get Subscribers`);
+      console.log(`   GET  http://localhost:${PORT}/api/newsletter/templates        - Admin: Get Templates`);
+      console.log(`   POST http://localhost:${PORT}/api/newsletter/templates        - Admin: Create Template`);
+      console.log(`   GET  http://localhost:${PORT}/api/newsletter/stats            - Admin: Statistics`);
+      
+      if (process.env.NODE_ENV === 'development') {
+        console.log('\n🛠️  Development endpoints:');
+        console.log(`   GET  http://localhost:${PORT}/debug/env         - Environment Check`);
+        console.log(`   POST http://localhost:${PORT}/api/contact/test   - Contact Test`);
+        console.log(`   GET  http://localhost:${PORT}/debug/cors-test   - CORS Test`);
+      }
+      
+      console.log('=' .repeat(60));
+      
+      // Environment Validation
+      const requiredEnvVars = [
+        'MONGODB_URI',
+        'JWT_SECRET',
+        'EMAIL_USER', 
+        'EMAIL_PASS'
+      ];
+      
+      const optionalEnvVars = [
+        'ADMIN_EMAIL',
+        'ADMIN_PASSWORD',
+        'SESSION_SECRET',
+        'FRONTEND_URL',
+        'APP_VERSION'
+      ];
+      
+      const missingRequired = requiredEnvVars.filter(varName => !process.env[varName]);
+      const missingOptional = optionalEnvVars.filter(varName => !process.env[varName]);
+      
+      if (missingRequired.length > 0) {
+        console.warn('\n⚠️  CRITICAL: Missing Required Environment Variables:');
+        missingRequired.forEach(varName => {
+          console.warn(`   ❌ ${varName}`);
+        });
+        console.warn('   ⚠️  Some core features will not work!\n');
+      } else {
+        console.log('\n✅ All required environment variables are set');
+      }
+      
+      if (missingOptional.length > 0) {
+        console.log('\n📝 Optional environment variables not set:');
+        missingOptional.forEach(varName => {
+          console.log(`   ⚪ ${varName}`);
+        });
+        console.log('   ℹ️  These features will be disabled.\n');
+      }
+      
+      console.log(`\n🎯 Frontend should connect to: http://localhost:${PORT}/api`);
+      console.log(`🔗 Test health check: curl http://localhost:${PORT}/health`);
+      console.log(`🔗 Test admin login: POST http://localhost:${PORT}/api/auth/login`);
+      console.log('   Body: {"email": "' + (process.env.ADMIN_EMAIL || 'your@email.com') + '", "password": "your_password"}');
+      console.log('\n✨ Ready to receive requests!\n');
     });
-  });
-  
-  // Force close after 30 seconds
-  setTimeout(() => {
-    console.error('⚠️ Could not close connections in time, forcefully shutting down');
-    process.exit(1);
-  }, 30000);
-};
 
-process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
-process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+    // Graceful Shutdown
+    const gracefulShutdown = (signal) => {
+      console.log(`\n📴 ${signal} received. Shutting down gracefully...`);
+      
+      server.close(() => {
+        console.log('🛑 HTTP server closed.');
+        
+        mongoose.connection.close(false, () => {
+          console.log('💾 Database connection closed.');
+          console.log('✅ Graceful shutdown completed.');
+          process.exit(0);
+        });
+      });
+      
+      setTimeout(() => {
+        console.error('⚠️ Could not close connections in time, forcefully shutting down');
+        process.exit(1);
+      }, 30000);
+    };
+
+    process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+
+    return server;
+    
+  } catch (error) {
+    console.error('❌ SERVER STARTUP ERROR:', error);
+    process.exit(1);
+  }
+};
 
 // Unhandled Promise Rejection Handler
 process.on('unhandledRejection', (reason, promise) => {
@@ -535,7 +629,6 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('📍 Reason:', reason);
   console.error('📍 Promise:', promise);
   
-  // In development, exit to catch issues early
   if (process.env.NODE_ENV === 'development') {
     console.error('💥 Exiting due to unhandled promise rejection in development');
     process.exit(1);
@@ -552,5 +645,8 @@ process.on('uncaughtException', (error) => {
   console.error('💥 This is critical, shutting down immediately');
   process.exit(1);
 });
+
+// Start the server
+startServer();
 
 export default app;

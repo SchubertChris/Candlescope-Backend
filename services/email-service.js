@@ -210,7 +210,7 @@ class EmailService {
 
       const providerName = provider === 'google' ? 'Google' : 'GitHub';
       const providerIcon = provider === 'google' ? '🌐' : '🐙';
-      const providerColor = provider === 'google' ? '#db4437' : '#333333';
+      const providerColor = provider === 'google' ? '#db4437' : '#ffffffff';
 
       const mailOptions = {
         from: process.env.EMAIL_USER,
