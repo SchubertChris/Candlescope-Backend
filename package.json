@@ -1,8 +1,13 @@
 {
   "name": "portfolio-chris-schubert-backend",
+  "version": "1.0.0",
   "type": "module",
-  "lockfileVersion": 3,
-  "requires": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js",
+    "build": "echo \"No build step defined\""
+  },
   "dependencies": {
     "bcrypt": "^6.0.0",
     "connect-mongo": "^5.1.0",
@@ -20,5 +25,8 @@
     "passport-github2": "^0.1.12",
     "passport-google-oauth20": "^2.0.0",
     "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
   }
 }
