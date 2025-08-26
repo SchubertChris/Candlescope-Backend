@@ -29,7 +29,7 @@ const contactSchema = new mongoose.Schema({
     trim: true,
     maxlength: [100, 'Unternehmen darf maximal 100 Zeichen lang sein'],
     default: null
-  
+  },
   
   // Projekt-Details
   projectType: {
