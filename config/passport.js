@@ -19,7 +19,7 @@ console.log("GITHUB_CLIENT_SECRET:", process.env.GITHUB_CLIENT_SECRET ? "✅ LOA
 // HINZUGEFÜGT: Dynamische Callback-URL Funktion
 const getCallbackURL = (provider) => {
   const baseURL = process.env.NODE_ENV === 'production' 
-    ? process.env.BACKEND_URL || 'https://your-backend-domain.com'
+    ? process.env.BACKEND_URL || 'https://candlescope-backend.onrender.com'
     : 'http://localhost:5000';
   
   const callbackURL = `${baseURL}/api/oauth/${provider}/callback`;
