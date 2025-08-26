@@ -1,5 +1,5 @@
 // server.js
-// VOLLSTÄNDIGE SERVER-DATEI mit Admin-Account Auto-Creation
+// VOLLSTÄNDIGE SERVER-DATEI - KORRIGIERT für Render Deployment
 import express from 'express';
 import cors from 'cors';
 import mongoose from 'mongoose';
@@ -24,13 +24,14 @@ const PORT = process.env.PORT || 5000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// CORS-Konfiguration
+// CORS-Konfiguration - KORRIGIERT für Production
 const corsOptions = {
   origin: [
     'http://localhost:5173',  // Vite dev server
     'http://localhost:3000',  // React dev server
     'http://127.0.0.1:5173',  // Alternative localhost
-    'https://portfolio-chris-schubert.vercel.app', // Production
+    'https://portfolio-chris-schubert.vercel.app', // Production Frontend
+    'https://candlescope-backend.onrender.com', // HINZUGEFÜGT: Backend URL für CORS
     process.env.FRONTEND_URL
   ].filter(Boolean),
   credentials: true,
@@ -82,7 +83,7 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// Database Connection
+// Database Connection - KORRIGIERT: Deprecated Optionen entfernt
 const connectDB = async () => {
   try {
     console.log('\n🔄 CONNECTING TO DATABASE...');
@@ -92,17 +93,19 @@ const connectDB = async () => {
       throw new Error('MONGODB_URI environment variable is not set');
     }
     
+    // GEÄNDERT: Deprecated Optionen entfernt
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
       serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+      bufferCommands: false,
     });
     
     console.log('✅ DATABASE CONNECTED SUCCESSFULLY');
     console.log('📊 Database:', conn.connection.name);
     console.log('🔗 Host:', conn.connection.host);
     console.log('🔐 Ready State:', conn.connection.readyState);
+    console.log('🔧 Mongoose Version:', mongoose.version);
     
     // Database event listeners
     mongoose.connection.on('error', (error) => {
@@ -124,7 +127,7 @@ const connectDB = async () => {
   }
 };
 
-// ADMIN ACCOUNT AUTO-CREATION
+// ADMIN ACCOUNT AUTO-CREATION - UNVERÄNDERT
 const ensureAdminAccount = async () => {
   try {
     console.log('\n👑 CHECKING ADMIN ACCOUNT...');
@@ -220,6 +223,8 @@ app.get('/', (req, res) => {
     message: 'Portfolio Backend API - Chris Schubert',
     version: process.env.APP_VERSION || '1.0.0',
     environment: process.env.NODE_ENV,
+    deploymentURL: 'https://candlescope-backend.onrender.com',
+    frontendURL: 'https://portfolio-chris-schubert.vercel.app',
     endpoints: {
       health: '/health',
       contact: '/api/contact',
@@ -379,6 +384,7 @@ app.get('/health', (req, res) => {
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
     port: PORT,
+    deployment: 'https://candlescope-backend.onrender.com',
     database: {
       state: dbStatus[dbState] || 'unknown',
       name: mongoose.connection.name,
@@ -504,7 +510,7 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Server Start mit Admin-Account Creation
+// Server Start - KORRIGIERT für Render Deployment
 const startServer = async () => {
   try {
     // 1. Database verbinden
@@ -513,37 +519,51 @@ const startServer = async () => {
     // 2. Admin-Account sicherstellen
     await ensureAdminAccount();
     
-    // 3. Server starten
-    const server = app.listen(PORT, () => {
+    // 3. Server starten - GEÄNDERT: '0.0.0.0' für Render Kompatibilität
+    const server = app.listen(PORT, '0.0.0.0', () => {
       console.log('\n🚀 SERVER STARTED SUCCESSFULLY');
       console.log('=' .repeat(60));
       console.log(`📍 Environment: ${process.env.NODE_ENV}`);
-      console.log(`🌐 Server running on: http://localhost:${PORT}`);
+      
+      // KORRIGIERT: Dynamische URL basierend auf Environment
+      const baseURL = process.env.NODE_ENV === 'production' 
+        ? 'https://candlescope-backend.onrender.com'
+        : `http://localhost:${PORT}`;
+        
+      console.log(`🌐 Server running on: ${baseURL}`);
+      console.log(`🔗 Listening on: 0.0.0.0:${PORT}`);
       console.log(`📊 Database: ${mongoose.connection.readyState === 1 ? 'Connected ✅' : 'Disconnected ❌'}`);
       console.log(`📧 Email Service: ${(process.env.EMAIL_USER && process.env.EMAIL_PASS) ? 'Configured ✅' : 'NOT CONFIGURED ❌'}`);
       console.log(`📬 Newsletter Service: Enabled ✅`);
       console.log(`👑 Admin Account: ${(process.env.ADMIN_EMAIL && process.env.ADMIN_PASSWORD) ? 'Auto-Creation ✅' : 'Manual Setup Required ❌'}`);
       
       console.log('\n📚 Available endpoints:');
-      console.log(`   GET  http://localhost:${PORT}/                    - API Info`);
-      console.log(`   GET  http://localhost:${PORT}/health             - Health Check`);
-      console.log(`   POST http://localhost:${PORT}/api/auth/login     - Login (Admin: ${process.env.ADMIN_EMAIL || 'check .env'})`);
-      console.log(`   POST http://localhost:${PORT}/api/contact        - Contact Form`);
-      console.log(`   ALL  http://localhost:${PORT}/api/dashboard/*    - Dashboard API (Auth Required)`);
-      console.log(`   ALL  http://localhost:${PORT}/api/oauth/*        - OAuth Authentication`);
+      console.log(`   GET  ${baseURL}/                    - API Info`);
+      console.log(`   GET  ${baseURL}/health             - Health Check`);
+      console.log(`   POST ${baseURL}/api/auth/login     - Login (Admin: ${process.env.ADMIN_EMAIL || 'check .env'})`);
+      console.log(`   POST ${baseURL}/api/contact        - Contact Form`);
+      console.log(`   ALL  ${baseURL}/api/dashboard/*    - Dashboard API (Auth Required)`);
+      console.log(`   ALL  ${baseURL}/api/oauth/*        - OAuth Authentication`);
+      
+      // OAuth Callback URLs für Provider Setup
+      if (process.env.NODE_ENV === 'production') {
+        console.log('\n🔐 OAuth Callback URLs (für Google/GitHub Console):');
+        console.log(`   Google: ${baseURL}/api/oauth/google/callback`);
+        console.log(`   GitHub: ${baseURL}/api/oauth/github/callback`);
+      }
       
       console.log('\n📬 Newsletter endpoints:');
-      console.log(`   POST http://localhost:${PORT}/api/newsletter/subscribe        - Public Newsletter Signup`);
-      console.log(`   GET  http://localhost:${PORT}/api/newsletter/subscribers      - Admin: Get Subscribers`);
-      console.log(`   GET  http://localhost:${PORT}/api/newsletter/templates        - Admin: Get Templates`);
-      console.log(`   POST http://localhost:${PORT}/api/newsletter/templates        - Admin: Create Template`);
-      console.log(`   GET  http://localhost:${PORT}/api/newsletter/stats            - Admin: Statistics`);
+      console.log(`   POST ${baseURL}/api/newsletter/subscribe        - Public Newsletter Signup`);
+      console.log(`   GET  ${baseURL}/api/newsletter/subscribers      - Admin: Get Subscribers`);
+      console.log(`   GET  ${baseURL}/api/newsletter/templates        - Admin: Get Templates`);
+      console.log(`   POST ${baseURL}/api/newsletter/templates        - Admin: Create Template`);
+      console.log(`   GET  ${baseURL}/api/newsletter/stats            - Admin: Statistics`);
       
       if (process.env.NODE_ENV === 'development') {
         console.log('\n🛠️  Development endpoints:');
-        console.log(`   GET  http://localhost:${PORT}/debug/env         - Environment Check`);
-        console.log(`   POST http://localhost:${PORT}/api/contact/test   - Contact Test`);
-        console.log(`   GET  http://localhost:${PORT}/debug/cors-test   - CORS Test`);
+        console.log(`   GET  ${baseURL}/debug/env         - Environment Check`);
+        console.log(`   POST ${baseURL}/api/contact/test   - Contact Test`);
+        console.log(`   GET  ${baseURL}/debug/cors-test   - CORS Test`);
       }
       
       console.log('=' .repeat(60));
@@ -585,9 +605,9 @@ const startServer = async () => {
         console.log('   ℹ️  These features will be disabled.\n');
       }
       
-      console.log(`\n🎯 Frontend should connect to: http://localhost:${PORT}/api`);
-      console.log(`🔗 Test health check: curl http://localhost:${PORT}/health`);
-      console.log(`🔗 Test admin login: POST http://localhost:${PORT}/api/auth/login`);
+      console.log(`\n🎯 Frontend should connect to: ${baseURL}/api`);
+      console.log(`🔗 Test health check: curl ${baseURL}/health`);
+      console.log(`🔗 Test admin login: POST ${baseURL}/api/auth/login`);
       console.log('   Body: {"email": "' + (process.env.ADMIN_EMAIL || 'your@email.com') + '", "password": "your_password"}');
       console.log('\n✨ Ready to receive requests!\n');
     });
