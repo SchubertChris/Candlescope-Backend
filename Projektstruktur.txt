@@ -1,0 +1,34 @@
+.
+   │.env
+   │.env.example
+   │.gitignore
+   │config
+   │   │passport.js
+   │middleware
+   │   │auth.js
+   │   │rate-limit.js
+   │models
+   │   │contact
+   │   │   │contact.js
+   │   │message
+   │   │   │message.js
+   │   │newsletter
+   │   │   │newsletter.js
+   │   │project
+   │   │   │project.js
+   │   │user
+   │   │   │user.js
+   │package-lock.json
+   │package.json
+   │Projektstruktur.txt
+   │routes
+   │   │auth.js
+   │   │contact.js
+   │   │dashboard.js
+   │   │newsletter.js
+   │   │oauth.js
+   │server.js
+   │services
+   │   │email-service.js
+   │   │newsletter-service.js
+   │todo.md

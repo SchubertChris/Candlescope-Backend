@@ -1,7 +1,7 @@
 // middleware/auth.js
 // AUTH MIDDLEWARE - Authentifizierung und Autorisierung für Newsletter
 import jwt from 'jsonwebtoken';
-import User from '../models/User/User.js';
+import User from '../models/user/user.js';
 
 // Basis-Authentifizierung (Token-basiert)
 export const requireAuth = async (req, res, next) => {

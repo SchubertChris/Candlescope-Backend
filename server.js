@@ -143,7 +143,7 @@ const ensureAdminAccount = async () => {
     console.log('📧 Admin Email from .env:', adminEmail);
     
     // Dynamic imports nach DB-Connection
-    const { default: User } = await import('./models/User/User.js');
+    const { default: User } = await import('./models/user/user.js');
     const { default: bcrypt } = await import('bcrypt');
     
     // Prüfen ob Admin bereits existiert
