@@ -8,7 +8,6 @@ const newsletterSubscriberSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
-    unique: true,
     lowercase: true,
     trim: true,
     match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Ungültige E-Mail-Adresse']
@@ -41,8 +40,7 @@ const newsletterSubscriberSchema = new mongoose.Schema({
   },
   unsubscribeToken: {
     type: String,
-    required: true,
-    unique: true
+    required: true
   },
   
   // Status
