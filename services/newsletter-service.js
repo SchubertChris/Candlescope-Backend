@@ -1,6 +1,6 @@
 // services/newsletter.service.js
 // VOLLSTÄNDIGER NEWSLETTER SERVICE - E-Mail-Versand und Template-Verarbeitung
-import { NewsletterSubscriber, NewsletterTemplate, NewsletterSendLog } from '../models/Newsletter/Newsletter.js';
+import { NewsletterSubscriber, NewsletterTemplate, NewsletterSendLog } from '../models/newsletter/newsletter.js';
 import emailService from './email-service.js';
 import crypto from 'crypto';
 
