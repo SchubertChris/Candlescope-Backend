@@ -187,15 +187,18 @@ router.post("/login",
 
 // HINZUGEFÜGT: OAuth-Redirect Routes für Frontend-Kompatibilität
 // Diese Routes leiten auf die korrekten OAuth-Endpunkte weiter
-router.get("/google", (req, res) => {
-  console.log("🔗 REDIRECTING GOOGLE OAUTH from /auth/google to /oauth/google");
-  res.redirect(`/api/oauth/google`);
+// Google Callback
+router.get("/google/callback", (req, res) => {
+  const query = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+  res.redirect(`${process.env.FRONTEND_URL}/oauth-success${query}`);
 });
 
-router.get("/github", (req, res) => {
-  console.log("🔗 REDIRECTING GITHUB OAUTH from /auth/github to /oauth/github");
-  res.redirect(`/api/oauth/github`);
+// GitHub Callback
+router.get("/github/callback", (req, res) => {
+  const query = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+  res.redirect(`${process.env.FRONTEND_URL}/oauth-success${query}`);
 });
+
 
 // HINZUGEFÜGT: OAuth Callback-Handler (falls Frontend diese URLs verwendet)
 router.get("/google/callback", (req, res) => {
