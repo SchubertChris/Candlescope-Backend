@@ -24,14 +24,13 @@ const PORT = process.env.PORT || 5000;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// CORS-Konfiguration - KORRIGIERT für Production
+// CORS-Konfiguration
 const corsOptions = {
   origin: [
     'http://localhost:5173',  // Vite dev server
     'http://localhost:3000',  // React dev server
     'http://127.0.0.1:5173',  // Alternative localhost
     'https://portfolio-chris-schubert.vercel.app', // Production Frontend
-    'https://candlescope-backend.onrender.com', // HINZUGEFÜGT: Backend URL für CORS
     process.env.FRONTEND_URL
   ].filter(Boolean),
   credentials: true,
@@ -83,7 +82,56 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// Database Connection - KORRIGIERT: Deprecated Optionen entfernt
+// Environment Validation
+const validateEnvironment = () => {
+  console.log('\n🔍 VALIDATING ENVIRONMENT VARIABLES...');
+  
+  const requiredVars = {
+    'MONGODB_URI': process.env.MONGODB_URI,
+    'JWT_SECRET': process.env.JWT_SECRET,
+  };
+  
+  const criticalVars = {
+    'GOOGLE_CLIENT_ID': process.env.GOOGLE_CLIENT_ID,
+    'GOOGLE_CLIENT_SECRET': process.env.GOOGLE_CLIENT_SECRET,
+    'GITHUB_CLIENT_ID': process.env.GITHUB_CLIENT_ID,
+    'GITHUB_CLIENT_SECRET': process.env.GITHUB_CLIENT_SECRET,
+  };
+  
+  let hasErrors = false;
+  
+  // Überprüfe kritische Variablen
+  console.log('📋 Required Variables:');
+  Object.entries(requiredVars).forEach(([key, value]) => {
+    if (!value) {
+      console.error(`   ❌ ${key}: NOT SET`);
+      hasErrors = true;
+    } else {
+      console.log(`   ✅ ${key}: SET`);
+    }
+  });
+  
+  // Überprüfe OAuth Variablen
+  console.log('\n🔐 OAuth Variables:');
+  Object.entries(criticalVars).forEach(([key, value]) => {
+    if (!value) {
+      console.warn(`   ⚠️  ${key}: NOT SET (OAuth will fail)`);
+    } else {
+      console.log(`   ✅ ${key}: SET`);
+    }
+  });
+  
+  if (hasErrors) {
+    console.error('\n❌ CRITICAL ENVIRONMENT VARIABLES MISSING!');
+    console.error('🔧 Set these in Render Dashboard → Environment Tab');
+    return false;
+  }
+  
+  console.log('\n✅ Environment validation passed');
+  return true;
+};
+
+// Database Connection - KORRIGIERT ohne deprecated Options
 const connectDB = async () => {
   try {
     console.log('\n🔄 CONNECTING TO DATABASE...');
@@ -93,7 +141,7 @@ const connectDB = async () => {
       throw new Error('MONGODB_URI environment variable is not set');
     }
     
-    // GEÄNDERT: Deprecated Optionen entfernt
+    // KORRIGIERT: Entfernt deprecated Optionen useNewUrlParser + useUnifiedTopology
     const conn = await mongoose.connect(process.env.MONGODB_URI, {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
@@ -120,14 +168,30 @@ const connectDB = async () => {
       console.log('🔄 Database reconnected');
     });
     
+    mongoose.connection.on('connected', () => {
+      console.log('🔗 Mongoose connected to MongoDB');
+    });
+    
   } catch (error) {
     console.error('❌ DATABASE CONNECTION ERROR:', error.message);
     console.error('📍 Full error:', error);
+    
+    // Detaillierteres Error-Logging
+    if (error.message?.includes('authentication')) {
+      console.error('🔑 AUTHENTICATION ERROR - Check MongoDB Username/Password');
+    } else if (error.message?.includes('ENOTFOUND')) {
+      console.error('🌐 DNS ERROR - Check MongoDB URI Hostname');
+    } else if (error.message?.includes('timeout')) {
+      console.error('⏱️ TIMEOUT ERROR - MongoDB Server unreachable');
+    } else if (error.message?.includes('IP')) {
+      console.error('🛡️ IP WHITELIST ERROR - Add 0.0.0.0/0 to MongoDB Atlas Network Access');
+    }
+    
     process.exit(1);
   }
 };
 
-// ADMIN ACCOUNT AUTO-CREATION - UNVERÄNDERT
+// ADMIN ACCOUNT AUTO-CREATION
 const ensureAdminAccount = async () => {
   try {
     console.log('\n👑 CHECKING ADMIN ACCOUNT...');
@@ -136,14 +200,14 @@ const ensureAdminAccount = async () => {
     const adminPassword = process.env.ADMIN_PASSWORD;
     
     if (!adminEmail || !adminPassword) {
-      console.warn('⚠️ ADMIN_EMAIL or ADMIN_PASSWORD not set in .env');
-      console.warn('   Add these to .env for auto-admin creation:');
+      console.warn('⚠️ ADMIN_EMAIL or ADMIN_PASSWORD not set in environment');
+      console.warn('   Add these to Render Environment Variables for auto-admin creation:');
       console.warn('   ADMIN_EMAIL=schubert_chris@rocketmail.com');
-      console.warn('   ADMIN_PASSWORD=dD0DeO$KBBO9');
+      console.warn('   ADMIN_PASSWORD=your_secure_password');
       return;
     }
     
-    console.log('📧 Admin Email from .env:', adminEmail);
+    console.log('📧 Admin Email from environment:', adminEmail);
     
     // Dynamic imports nach DB-Connection
     const { default: User } = await import('./models/user/user.js');
@@ -171,7 +235,7 @@ const ensureAdminAccount = async () => {
     // Admin-Account erstellen
     console.log('🆕 CREATING NEW ADMIN ACCOUNT...');
     console.log('   - Email:', adminEmail);
-    console.log('   - Password: [FROM .env ADMIN_PASSWORD]');
+    console.log('   - Password: [FROM ENVIRONMENT VARIABLE]');
     
     const hashedPassword = await bcrypt.hash(adminPassword, 10);
     
@@ -199,7 +263,7 @@ const ensureAdminAccount = async () => {
     console.log('   - Company:', savedAdmin.company);
     console.log('🔑 LOGIN CREDENTIALS:');
     console.log('   - Email:', adminEmail);
-    console.log('   - Password: [Check .env ADMIN_PASSWORD]');
+    console.log('   - Password: [Check Environment Variable ADMIN_PASSWORD]');
     
     return savedAdmin;
     
@@ -219,12 +283,15 @@ const ensureAdminAccount = async () => {
 
 // API Info Route
 app.get('/', (req, res) => {
+  const baseURL = process.env.NODE_ENV === 'production' 
+    ? `https://candlescope-backend.onrender.com`
+    : `http://localhost:${PORT}`;
+    
   res.json({
     message: 'Portfolio Backend API - Chris Schubert',
     version: process.env.APP_VERSION || '1.0.0',
     environment: process.env.NODE_ENV,
-    deploymentURL: 'https://candlescope-backend.onrender.com',
-    frontendURL: 'https://portfolio-chris-schubert.vercel.app',
+    baseURL: baseURL,
     endpoints: {
       health: '/health',
       contact: '/api/contact',
@@ -242,7 +309,7 @@ app.get('/', (req, res) => {
       newsletter_admin: 'GET /api/newsletter/* (Admin Auth Required)',
       dashboard: 'GET /api/dashboard/* (Auth Required)',
       health_check: 'GET /health',
-      admin_login: 'POST /api/auth/login (Use ADMIN_EMAIL/ADMIN_PASSWORD from .env)'
+      admin_login: 'POST /api/auth/login (Use ADMIN_EMAIL/ADMIN_PASSWORD from environment)'
     },
     cors: {
       origins: corsOptions.origin,
@@ -264,7 +331,7 @@ app.get('/api/newsletter/track/open/:subscriberId/:newsletterId', async (req, re
   try {
     const { subscriberId, newsletterId } = req.params;
     
-    const { default: newsletterService } = await import('./services/newsletter.service.js');
+    const { default: newsletterService } = await import('./services/newsletter-service.js');
     await newsletterService.trackEmailOpen(subscriberId, newsletterId);
     
     // 1x1 transparentes Pixel
@@ -297,7 +364,7 @@ app.get('/api/newsletter/track/click/:subscriberId/:newsletterId', async (req, r
       return res.status(400).json({ error: 'URL parameter required' });
     }
     
-    const { default: newsletterService } = await import('./services/newsletter.service.js');
+    const { default: newsletterService } = await import('./services/newsletter-service.js');
     await newsletterService.trackEmailClick(subscriberId, newsletterId, url);
     
     res.redirect(decodeURIComponent(url));
@@ -379,12 +446,16 @@ app.get('/health', (req, res) => {
     3: 'disconnecting'
   };
 
+  const baseURL = process.env.NODE_ENV === 'production' 
+    ? 'https://candlescope-backend.onrender.com'
+    : `http://localhost:${PORT}`;
+
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV,
     port: PORT,
-    deployment: 'https://candlescope-backend.onrender.com',
+    baseURL: baseURL,
     database: {
       state: dbStatus[dbState] || 'unknown',
       name: mongoose.connection.name,
@@ -410,17 +481,10 @@ app.get('/health', (req, res) => {
 // 404 Handler
 app.use('*', (req, res) => {
   console.log(`❌ 404 - Route not found: ${req.method} ${req.originalUrl}`);
-  console.log('📍 Available routes:');
-  console.log('   GET  / - API Info');
-  console.log('   GET  /health - Health Check');
-  console.log('   POST /api/contact - Contact Form');
-  console.log('   ALL  /api/newsletter/* - Newsletter API');
-  console.log('   POST /api/auth/login - Login (use ADMIN_EMAIL/ADMIN_PASSWORD)');
-  if (process.env.NODE_ENV === 'development') {
-    console.log('   GET  /debug/env - Environment Variables');
-    console.log('   POST /api/contact/test - Contact Test');
-    console.log('   GET  /api/contact/test-email - Email Test');
-  }
+  
+  const baseURL = process.env.NODE_ENV === 'production' 
+    ? 'https://candlescope-backend.onrender.com'
+    : `http://localhost:${PORT}`;
   
   res.status(404).json({
     success: false,
@@ -428,23 +492,23 @@ app.use('*', (req, res) => {
     path: req.originalUrl,
     method: req.method,
     availableEndpoints: [
-      'GET /',
-      'GET /health',
-      'POST /api/contact',
-      'POST /api/contact/newsletter',
-      'POST /api/auth/login',
-      'ALL /api/newsletter/*',
-      'ALL /api/dashboard/*',
-      'ALL /api/auth/*',
-      'ALL /api/oauth/*',
+      `GET ${baseURL}/`,
+      `GET ${baseURL}/health`,
+      `POST ${baseURL}/api/contact`,
+      `POST ${baseURL}/api/newsletter/subscribe`,
+      `POST ${baseURL}/api/auth/login`,
+      `ALL ${baseURL}/api/newsletter/*`,
+      `ALL ${baseURL}/api/dashboard/*`,
+      `ALL ${baseURL}/api/auth/*`,
+      `ALL ${baseURL}/api/oauth/*`,
       ...(process.env.NODE_ENV === 'development' ? [
-        'GET /debug/env',
-        'POST /api/contact/test',
-        'GET /api/contact/test-email',
-        'GET /api/contact/test-db'
+        `GET ${baseURL}/debug/env`,
+        `POST ${baseURL}/api/contact/test`,
+        `GET ${baseURL}/api/contact/test-email`,
+        `GET ${baseURL}/api/contact/test-db`
       ] : [])
     ],
-    suggestion: 'Check available endpoints at GET /',
+    suggestion: `Check available endpoints at GET ${baseURL}/`,
     timestamp: new Date().toISOString()
   });
 });
@@ -510,22 +574,31 @@ app.use((error, req, res, next) => {
   });
 });
 
-// Server Start - KORRIGIERT für Render Deployment
+// Server Start mit verbessertem Environment Handling
 const startServer = async () => {
   try {
-    // 1. Database verbinden
+    console.log('\n🚀 STARTING SERVER...');
+    console.log('=' .repeat(60));
+    
+    // 1. Environment validieren VOR Database Connection
+    if (!validateEnvironment()) {
+      console.error('💥 ENVIRONMENT VALIDATION FAILED - Server cannot start');
+      process.exit(1);
+    }
+    
+    // 2. Database verbinden
     await connectDB();
     
-    // 2. Admin-Account sicherstellen
+    // 3. Admin-Account sicherstellen
     await ensureAdminAccount();
     
-    // 3. Server starten - GEÄNDERT: '0.0.0.0' für Render Kompatibilität
+    // 4. Server starten - KORRIGIERT mit '0.0.0.0' für Render
     const server = app.listen(PORT, '0.0.0.0', () => {
       console.log('\n🚀 SERVER STARTED SUCCESSFULLY');
       console.log('=' .repeat(60));
       console.log(`📍 Environment: ${process.env.NODE_ENV}`);
       
-      // KORRIGIERT: Dynamische URL basierend auf Environment
+      // Dynamische URL-Anzeige
       const baseURL = process.env.NODE_ENV === 'production' 
         ? 'https://candlescope-backend.onrender.com'
         : `http://localhost:${PORT}`;
@@ -540,16 +613,19 @@ const startServer = async () => {
       console.log('\n📚 Available endpoints:');
       console.log(`   GET  ${baseURL}/                    - API Info`);
       console.log(`   GET  ${baseURL}/health             - Health Check`);
-      console.log(`   POST ${baseURL}/api/auth/login     - Login (Admin: ${process.env.ADMIN_EMAIL || 'check .env'})`);
+      console.log(`   POST ${baseURL}/api/auth/login     - Login (Admin: ${process.env.ADMIN_EMAIL || 'check environment'})`);
       console.log(`   POST ${baseURL}/api/contact        - Contact Form`);
       console.log(`   ALL  ${baseURL}/api/dashboard/*    - Dashboard API (Auth Required)`);
       console.log(`   ALL  ${baseURL}/api/oauth/*        - OAuth Authentication`);
       
-      // OAuth Callback URLs für Provider Setup
+      // OAuth URLs für Provider-Konfiguration anzeigen
       if (process.env.NODE_ENV === 'production') {
-        console.log('\n🔐 OAuth Callback URLs (für Google/GitHub Console):');
+        console.log('\n🔐 OAuth Callback URLs für Provider-Setup:');
         console.log(`   Google: ${baseURL}/api/oauth/google/callback`);
         console.log(`   GitHub: ${baseURL}/api/oauth/github/callback`);
+        console.log('\n⚠️  WICHTIG: Aktualisiere diese URLs in:');
+        console.log('   - Google Cloud Console → OAuth 2.0 Client IDs');
+        console.log('   - GitHub → Developer settings → OAuth Apps');
       }
       
       console.log('\n📬 Newsletter endpoints:');
@@ -568,47 +644,19 @@ const startServer = async () => {
       
       console.log('=' .repeat(60));
       
-      // Environment Validation
-      const requiredEnvVars = [
-        'MONGODB_URI',
-        'JWT_SECRET',
-        'EMAIL_USER', 
-        'EMAIL_PASS'
-      ];
-      
-      const optionalEnvVars = [
-        'ADMIN_EMAIL',
-        'ADMIN_PASSWORD',
-        'SESSION_SECRET',
-        'FRONTEND_URL',
-        'APP_VERSION'
-      ];
-      
-      const missingRequired = requiredEnvVars.filter(varName => !process.env[varName]);
-      const missingOptional = optionalEnvVars.filter(varName => !process.env[varName]);
-      
-      if (missingRequired.length > 0) {
-        console.warn('\n⚠️  CRITICAL: Missing Required Environment Variables:');
-        missingRequired.forEach(varName => {
-          console.warn(`   ❌ ${varName}`);
-        });
-        console.warn('   ⚠️  Some core features will not work!\n');
-      } else {
-        console.log('\n✅ All required environment variables are set');
-      }
-      
-      if (missingOptional.length > 0) {
-        console.log('\n📝 Optional environment variables not set:');
-        missingOptional.forEach(varName => {
-          console.log(`   ⚪ ${varName}`);
-        });
-        console.log('   ℹ️  These features will be disabled.\n');
-      }
-      
       console.log(`\n🎯 Frontend should connect to: ${baseURL}/api`);
       console.log(`🔗 Test health check: curl ${baseURL}/health`);
       console.log(`🔗 Test admin login: POST ${baseURL}/api/auth/login`);
       console.log('   Body: {"email": "' + (process.env.ADMIN_EMAIL || 'your@email.com') + '", "password": "your_password"}');
+      
+      // Deployment-spezifische Informationen
+      if (process.env.NODE_ENV === 'production') {
+        console.log('\n🌐 PRODUCTION DEPLOYMENT INFO:');
+        console.log(`   - Backend URL: ${baseURL}`);
+        console.log(`   - Frontend URL: ${process.env.FRONTEND_URL || 'https://portfolio-chris-schubert.vercel.app'}`);
+        console.log(`   - CORS Origins: ${JSON.stringify(corsOptions.origin)}`);
+      }
+      
       console.log('\n✨ Ready to receive requests!\n');
     });
 
@@ -639,6 +687,11 @@ const startServer = async () => {
     
   } catch (error) {
     console.error('❌ SERVER STARTUP ERROR:', error);
+    console.error('📍 Error Details:', {
+      name: error.name,
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : 'Hidden in production'
+    });
     process.exit(1);
   }
 };
