@@ -424,17 +424,12 @@ if (process.env.NODE_ENV === 'development') {
   });
 }
 
-// Static files (Production)
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, 'public')));
-  
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api/')) {
-      return next();
-    }
-    res.sendFile(path.join(__dirname, 'public', 'index.html'));
-  });
+  // Nur statische API-Routen
+  app.get('/api/*', (req, res, next) => next());
+  // Alles andere wird vom Frontend auf Vercel bedient
 }
+
 
 // Health Check Route
 app.get('/health', (req, res) => {
