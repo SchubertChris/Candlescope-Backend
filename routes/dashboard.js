@@ -4,9 +4,9 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 
 // Dynamic imports für Models
-const User = (await import('../models/User/User.js')).default;
-const Project = (await import('../models/Project/Project.js')).default;
-const Message = (await import('../models/Message/Message.js')).default;
+const User = (await import('../models/user/user.js')).default;
+const Project = (await import('../models/project/project.js')).default;
+const Message = (await import('../models/message/message.js')).default;
 
 const router = express.Router();
 

@@ -5,7 +5,7 @@ import {
   NewsletterSubscriber,
   NewsletterTemplate,
   NewsletterSendLog,
-} from "../models/Newsletter/Newsletter.js";
+} from "../models/newsletter/newsletter.js";
 import { requireAuth, requireAdmin } from "../middleware/auth.js";
 // In routes/newsletter.js ÄNDERN:
 import newsletterService from '../services/newsletter-service.js';  // ← Mit Bindestrich

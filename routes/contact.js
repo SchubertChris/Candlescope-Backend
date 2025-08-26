@@ -2,8 +2,8 @@
 // VOLLSTÄNDIG KORRIGIERT: Richtiger Import-Pfad + IPv6-sicheres Rate Limiting
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import Contact from '../models/Contact/contact.js';
 import emailService from '../services/email-service.js';
+import Contact from '../models/contact/contact.js';
 
 const router = express.Router();
 

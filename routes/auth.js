@@ -3,7 +3,7 @@
 import express from "express";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
-import User from "../models/User/User.js";
+import User from "../models/user/user.js";
 import emailService from "../services/email-service.js";
 import { loginLimiter, accountCreationLimiter, emailRateLimiter } from "../middleware/rate-limit.js";
 
