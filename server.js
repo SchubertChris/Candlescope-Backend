@@ -30,7 +30,7 @@ const corsOptions = {
     'http://localhost:5173',  // Vite dev server
     'http://localhost:3000',  // React dev server
     'http://127.0.0.1:5173',  // Alternative localhost
-    'https://portfolio-chris-schubert.vercel.app', // Production Frontend
+    'https://candlescope-frontend.vercel.app', // Production Frontend
     process.env.FRONTEND_URL
   ].filter(Boolean),
   credentials: true,
