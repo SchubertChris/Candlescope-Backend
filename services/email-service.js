@@ -254,7 +254,7 @@ class EmailService {
             <div style="margin-bottom: 32px;">
             <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 16px; padding: 20px;">
               <p style="margin: 0 0 8px; font-size: 14px; font-weight: 600; color: #22c55e; text-transform: uppercase; letter-spacing: 1px;">✅ Status</p>
-              <p style="margin: 0; font-size: 18px; color: #22c55e; font-weight: 600;">Account aktiv über ${providerName}</p>
+              <p style="margin: 0; font-size: 18px; color: #22c55e; font-weight: 600;">Account aktiv über ${providerName}. Ändere dein Passwort in den Einstellungen!</p>
             </div>
             </div>
             
