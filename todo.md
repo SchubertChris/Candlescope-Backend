@@ -1,10 +1,1 @@
-Struktur reinbringen 
-
-eventuell 
-
-config
-middleware
-validator
-models
-routes
-services
+1. Struktur reinbringen 
