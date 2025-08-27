@@ -95,7 +95,7 @@ class EmailService {
             <div style="margin-bottom: 24px;">
             <div style="background: rgba(162, 89, 255, 0.1); border: 1px solid rgba(162, 89, 255, 0.3); border-radius: 16px; padding: 20px;">
               <p style="margin: 0 0 8px; font-size: 14px; font-weight: 600; color: #a259ff; text-transform: uppercase; letter-spacing: 1px;">📧 Email-Adresse</p>
-              <p style="margin: 0; font-family: 'Courier New', monospace; font-size: 18px; color: #ffffff; word-break: break-all;">${email}</p>
+              <p style="margin: 0; font-family: 'Courier New', monospace; font-size: 18px; color: #ffffff !important; word-break: break-all;">${email}</p>
             </div>
             </div>
             
