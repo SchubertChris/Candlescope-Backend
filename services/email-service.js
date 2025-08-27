@@ -1,6 +1,7 @@
 // services/email-service.js
 // KORRIGIERT: Robuste Fehlerbehandlung + Credential-Validation OHNE Optik-Änderungen
-import nodemailer from 'nodemailer';
+import nodemailer from "nodemailer";
+import crypto from "crypto";
 
 class EmailService {
   constructor() {
@@ -11,59 +12,80 @@ class EmailService {
   // KORRIGIERT: Transporter erst bei Bedarf initialisieren + Fehlerbehandlung
   getTransporter() {
     if (!this.transporter) {
-      console.log('🔧 INITIALIZING EMAIL TRANSPORTER:');
-      console.log('EMAIL_USER:', process.env.EMAIL_USER || 'MISSING');
-      console.log('EMAIL_PASS:', process.env.EMAIL_PASS ? `${process.env.EMAIL_PASS.length} chars` : 'MISSING');
-      
+      console.log("🔧 INITIALIZING EMAIL TRANSPORTER:");
+      console.log("EMAIL_USER:", process.env.EMAIL_USER || "MISSING");
+      console.log(
+        "EMAIL_PASS:",
+        process.env.EMAIL_PASS
+          ? `${process.env.EMAIL_PASS.length} chars`
+          : "MISSING"
+      );
+
       // KORRIGIERT: Credential-Check vor Transporter-Erstellung
       if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-        throw new Error('EMAIL_USER und EMAIL_PASS müssen in .env gesetzt sein');
+        throw new Error(
+          "EMAIL_USER und EMAIL_PASS müssen in .env gesetzt sein"
+        );
       }
-      
+
       // KORRIGIERT: createTransport (nicht createTransporter) + Timeout-Konfiguration
       this.transporter = nodemailer.createTransport({
-        service: 'gmail',
+        service: "gmail",
         auth: {
           user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS
+          pass: process.env.EMAIL_PASS,
         },
         // HINZUGEFÜGT: Timeout-Konfiguration für Stabilität
         connectionTimeout: 10000, // 10 Sekunden
-        greetingTimeout: 5000,    // 5 Sekunden
-        socketTimeout: 10000      // 10 Sekunden
+        greetingTimeout: 5000, // 5 Sekunden
+        socketTimeout: 10000, // 10 Sekunden
       });
     }
     return this.transporter;
   }
 
-  generateRandomPassword(length = 12) {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*';
-    let password = '';
-    
-    password += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'[Math.floor(Math.random() * 26)];
-    password += 'abcdefghijklmnopqrstuvwxyz'[Math.floor(Math.random() * 26)];
-    password += '0123456789'[Math.floor(Math.random() * 10)];
-    password += '!@#$%^&*'[Math.floor(Math.random() * 8)];
-    
-    for (let i = 4; i < length; i++) {
-      password += chars[Math.floor(Math.random() * chars.length)];
-    }
-    
-    return password.split('').sort(() => Math.random() - 0.5).join('');
+
+generateRandomPassword(length = 12) {
+  const uppercase = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const lowercase = "abcdefghijklmnopqrstuvwxyz";
+  const numbers = "0123456789";
+  const symbols = "!@#$%^&*";
+  const allChars = uppercase + lowercase + numbers + symbols;
+
+  let password = "";
+  password += uppercase[crypto.randomInt(0, uppercase.length)];
+  password += lowercase[crypto.randomInt(0, lowercase.length)];
+  password += numbers[crypto.randomInt(0, numbers.length)];
+  password += symbols[crypto.randomInt(0, symbols.length)];
+
+  for (let i = 4; i < length; i++) {
+    password += allChars[crypto.randomInt(0, allChars.length)];
   }
+
+  // Sicheres Shuffle
+  password = password
+    .split("")
+    .map((char) => ({ char, sort: crypto.randomInt(0, 1000) }))
+    .sort((a, b) => a.sort - b.sort)
+    .map((obj) => obj.char)
+    .join("");
+
+  return password;
+}
+
 
   async sendLoginCredentials(email, temporaryPassword) {
     try {
       // KORRIGIERT: Credential-Check zur Laufzeit mit besserer Fehlerbehandlung
       if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-        console.error('❌ EMAIL CREDENTIALS MISSING AT RUNTIME');
-        return { success: false, error: 'Email credentials not configured' };
+        console.error("❌ EMAIL CREDENTIALS MISSING AT RUNTIME");
+        return { success: false, error: "Email credentials not configured" };
       }
 
       const mailOptions = {
         from: process.env.EMAIL_USER,
         to: email,
-        subject: '🔐 Ihre CandleScope Login-Daten',
+        subject: "🔐 Ihre CandleScope Login-Daten",
         html: `
         <div style="font-family: 'Arial', sans-serif; max-width: 650px; margin: 0 auto; padding: 0; background: #0f0f23; border-radius: 24px; overflow: hidden;">
           
@@ -170,47 +192,47 @@ class EmailService {
           </div>
           </div>
         </div>
-        `
+        `,
       };
 
       // KORRIGIERT: Bessere Fehlerbehandlung beim Email-Versand
       console.log(`📤 SENDING EMAIL TO: ${email}`);
       const transporter = this.getTransporter();
       const info = await transporter.sendMail(mailOptions);
-      console.log('✅ EMAIL SENT SUCCESSFULLY:', info.messageId);
+      console.log("✅ EMAIL SENT SUCCESSFULLY:", info.messageId);
       return { success: true, messageId: info.messageId };
-      
     } catch (error) {
-      console.error('❌ EMAIL SEND ERROR:', error.message);
-      console.error('❌ FULL ERROR:', error);
-      
+      console.error("❌ EMAIL SEND ERROR:", error.message);
+      console.error("❌ FULL ERROR:", error);
+
       // KORRIGIERT: Spezifische Fehlerbehandlung für verschiedene Email-Probleme
       let errorMessage = error.message;
-      
-      if (error.code === 'EAUTH') {
-        errorMessage = 'Email-Authentifizierung fehlgeschlagen. Prüfen Sie EMAIL_USER und EMAIL_PASS.';
-      } else if (error.code === 'ECONNECTION') {
-        errorMessage = 'Keine Verbindung zum Email-Server möglich.';
-      } else if (error.code === 'ETIMEDOUT') {
-        errorMessage = 'Email-Versand Timeout. Versuchen Sie es später erneut.';
+
+      if (error.code === "EAUTH") {
+        errorMessage =
+          "Email-Authentifizierung fehlgeschlagen. Prüfen Sie EMAIL_USER und EMAIL_PASS.";
+      } else if (error.code === "ECONNECTION") {
+        errorMessage = "Keine Verbindung zum Email-Server möglich.";
+      } else if (error.code === "ETIMEDOUT") {
+        errorMessage = "Email-Versand Timeout. Versuchen Sie es später erneut.";
       }
-      
+
       return { success: false, error: errorMessage };
     }
   }
 
   // OAuth-Welcome-Email-Funktion (UNVERÄNDERT - exakt deine Optik)
-  async sendOAuthWelcomeEmail(email, provider, userName = '') {
+  async sendOAuthWelcomeEmail(email, provider, userName = "") {
     try {
       // Credential-Check zur Laufzeit
       if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-        console.error('❌ EMAIL CREDENTIALS MISSING AT RUNTIME');
-        return { success: false, error: 'Email credentials not configured' };
+        console.error("❌ EMAIL CREDENTIALS MISSING AT RUNTIME");
+        return { success: false, error: "Email credentials not configured" };
       }
 
-      const providerName = provider === 'google' ? 'Google' : 'GitHub';
-      const providerIcon = provider === 'google' ? '🌐' : '🐙';
-      const providerColor = provider === 'google' ? '#db4437' : '#ffffffff';
+      const providerName = provider === "google" ? "Google" : "GitHub";
+      const providerIcon = provider === "google" ? "🌐" : "🐙";
+      const providerColor = provider === "google" ? "#db4437" : "#ffffffff";
 
       const mailOptions = {
         from: process.env.EMAIL_USER,
@@ -234,7 +256,9 @@ class EmailService {
           
           <!-- Welcome Message -->
           <div style="text-align: center; margin-bottom: 40px;">
-            <h2 style="margin: 0 0 16px; font-size: 28px; font-weight: 400; color: #ffffff;">Willkommen${userName ? `, ${userName}` : ''}!</h2>
+            <h2 style="margin: 0 0 16px; font-size: 28px; font-weight: 400; color: #ffffff;">Willkommen${
+              userName ? `, ${userName}` : ""
+            }!</h2>
             <p style="margin: 0; font-size: 16px; color: rgba(255, 255, 255, 0.7); line-height: 1.6; max-width: 480px; margin: 0 auto;">
             Sie haben sich erfolgreich über ${providerName} bei CandleScope angemeldet. Ihr Account ist jetzt aktiv und Sie können alle Features nutzen.
             </p>
@@ -247,9 +271,14 @@ class EmailService {
             <div style="margin-bottom: 24px;">
             <div style="background: rgba(162, 89, 255, 0.1); border: 1px solid rgba(162, 89, 255, 0.3); border-radius: 16px; padding: 20px;">
               <p style="margin: 0 0 8px; font-size: 14px; font-weight: 600; color: #a259ff; text-transform: uppercase; letter-spacing: 1px;">📧 Angemeldete Email</p>
-              <p style="margin: 0; font-family: 'Courier New', monospace; font-size: 18px; color: #ffffff; word-break: break-all;">${email}</p>
-            </div>
-            </div>
+              <p style="margin: 0; font-family: 'Courier New', monospace; font-size: 18px; word-break: break-all;">
+              <a href="mailto:${email}" 
+              style="color:#ffffff !important; text-decoration:none; word-break: break-all;">
+              <span style="color:#ffffff !important;">${email}</span>
+              </a>
+            </p>
+        </div>
+      </div>
             
             <div style="margin-bottom: 32px;">
             <div style="background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 16px; padding: 20px;">
@@ -315,25 +344,30 @@ class EmailService {
           <div style="background: #0f0f23; padding: 32px 40px; text-align: center; border-top: 1px solid rgba(255, 255, 255, 0.1);">
           <p style="margin: 0 0 16px; font-size: 14px; color: rgba(255, 255, 255, 0.5);">
             Diese Email wurde automatisch nach Ihrer ${providerName} Anmeldung generiert.<br>
-            Bei Fragen erreichen Sie uns direkt über: <a href="mailto:${process.env.EMAIL_USER}" style="color: #a259ff; text-decoration: none;">${process.env.EMAIL_USER}</a>
+            Bei Fragen erreichen Sie uns direkt über: <a href="mailto:${
+              process.env.EMAIL_USER
+            }" style="color: #a259ff; text-decoration: none;">${
+          process.env.EMAIL_USER
+        }</a>
           </p>
           <div style="margin-top: 20px;">
             <span style="font-size: 12px; color: rgba(255, 255, 255, 0.3);">CandleScope - Ihr persönlicher Kommunikationskanal</span>
           </div>
           </div>
         </div>
-        `
+        `,
       };
 
-      console.log(`📤 SENDING OAUTH WELCOME EMAIL TO: ${email} (${providerName})`);
+      console.log(
+        `📤 SENDING OAUTH WELCOME EMAIL TO: ${email} (${providerName})`
+      );
       const transporter = this.getTransporter();
       const info = await transporter.sendMail(mailOptions);
-      console.log('✅ OAUTH EMAIL SENT SUCCESSFULLY:', info.messageId);
+      console.log("✅ OAUTH EMAIL SENT SUCCESSFULLY:", info.messageId);
       return { success: true, messageId: info.messageId };
-      
     } catch (error) {
-      console.error('❌ OAUTH EMAIL SEND ERROR:', error.message);
-      console.error('❌ FULL ERROR:', error);
+      console.error("❌ OAUTH EMAIL SEND ERROR:", error.message);
+      console.error("❌ FULL ERROR:", error);
       return { success: false, error: error.message };
     }
   }
@@ -341,13 +375,13 @@ class EmailService {
   // Connection-Test mit Lazy Loading (KORRIGIERT: Bessere Fehlerbehandlung)
   async testConnection() {
     try {
-      console.log('🔍 TESTING EMAIL CONNECTION...');
+      console.log("🔍 TESTING EMAIL CONNECTION...");
       const transporter = this.getTransporter();
       await transporter.verify();
-      console.log('✅ EMAIL CONNECTION SUCCESSFUL');
+      console.log("✅ EMAIL CONNECTION SUCCESSFUL");
       return true;
     } catch (error) {
-      console.error('❌ EMAIL CONNECTION FAILED:', error.message);
+      console.error("❌ EMAIL CONNECTION FAILED:", error.message);
       return false;
     }
   }
