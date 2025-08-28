@@ -6,13 +6,9 @@ import jwt from "jsonwebtoken";
 import User from "../models/user/User.js";
 import emailService from "../services/email-service.js";
 import { loginLimiter, accountCreationLimiter, emailRateLimiter } from "../middleware/rate-limit.js";
+import { ENV } from "../utils/env.js";
 
 const router = express.Router();
-
-// HINZUGEFÜGT: Dynamische Frontend-URL
-const getFrontendURL = () => {
-  return process.env.FRONTEND_URL || "http://localhost:5173";
-};
 
 // Login mit automatischer Account-Erstellung
 router.post("/login", loginLimiter, emailRateLimiter, async (req, res) => {
@@ -278,7 +274,7 @@ router.get("/oauth-status", (req, res) => {
       google: "/api/oauth/google",
       github: "/api/oauth/github",
     },
-    frontendURL: getFrontendURL(),
+    frontendURL: ENV.FRONTEND_URL,
   });
 });
 

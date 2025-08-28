@@ -16,7 +16,9 @@ export function readEnvVar(variable, defaultValue = undefined) {
 
 export const ENV = {
   NODE_ENV: readEnvVar("NODE_ENV", "development"),
+  PORT: readEnvVar("PORT", 5000),
   BACKEND_URL: readEnvVar("BACKEND_URL", "http://localhost:5000"),
+  FRONTEND_URL: readEnvVar("FRONTEND_URL", "http://localhost:3000"),
   GOOGLE: {
     CLIENT_ID: readEnvVar("GOOGLE_CLIENT_ID"),
     CLIENT_SECRET: readEnvVar("GOOGLE_CLIENT_SECRET"),
