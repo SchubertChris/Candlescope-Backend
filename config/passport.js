@@ -4,26 +4,27 @@ import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as GitHubStrategy } from "passport-github2";
 import User from "../models/user/user.js";
-import jwt from "jsonwebtoken";
 import emailService from "../services/email-service.js";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-console.log("🔍 PASSPORT - Checking OAuth credentials:");
+console.group("🔍 PASSPORT - Checking OAuth credentials:");
 console.log("GOOGLE_CLIENT_ID:", process.env.GOOGLE_CLIENT_ID ? "✅ LOADED" : "❌ MISSING");
 console.log("GOOGLE_CLIENT_SECRET:", process.env.GOOGLE_CLIENT_SECRET ? "✅ LOADED" : "❌ MISSING");
 console.log("GITHUB_CLIENT_ID:", process.env.GITHUB_CLIENT_ID ? "✅ LOADED" : "❌ MISSING");
 console.log("GITHUB_CLIENT_SECRET:", process.env.GITHUB_CLIENT_SECRET ? "✅ LOADED" : "❌ MISSING");
+console.groupEnd();
 
 // HINZUGEFÜGT: Dynamische Callback-URL Funktion
 const getCallbackURL = (provider) => {
-  const baseURL = process.env.NODE_ENV === 'production' 
-    ? process.env.BACKEND_URL || 'https://candlescope-backend.onrender.com'
-    : 'http://localhost:5000';
-  
+  const baseURL =
+    process.env.NODE_ENV === "production"
+      ? process.env.BACKEND_URL || "https://candlescope-backend.onrender.com"
+      : "http://localhost:5000";
+
   const callbackURL = `${baseURL}/api/oauth/${provider}/callback`;
-  
+
   console.log(`🔗 ${provider.toUpperCase()} CALLBACK URL:`, callbackURL);
   return callbackURL;
 };
@@ -37,15 +38,16 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
       {
         clientID: process.env.GOOGLE_CLIENT_ID,
         clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-        callbackURL: getCallbackURL('google'),
+        callbackURL: getCallbackURL("google"),
       },
       async (accessToken, refreshToken, profile, done) => {
         try {
-          console.log("\n🔍 GOOGLE AUTH CALLBACK STARTED");
+          console.group("\n🔍 GOOGLE AUTH CALLBACK STARTED");
           console.log("  - Profile ID:", profile.id);
           console.log("  - Email:", profile.emails[0].value);
           console.log("  - Name:", profile.displayName);
           console.log("  - Avatar:", profile.photos[0]?.value);
+          console.groupEnd();
 
           const userEmail = profile.emails[0].value;
           let user = await User.findOne({ email: userEmail });
@@ -55,7 +57,7 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             console.log("✅ GOOGLE AUTH - Existing user found");
             console.log("  - User ID:", user._id);
             console.log("  - Current Role:", user.role);
-            
+
             if (!user.googleId) {
               user.googleId = profile.id;
               user.name = user.name || profile.displayName;
@@ -67,13 +69,13 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
               user.lastLogin = new Date();
               await user.save();
             }
-            
+
             return done(null, user);
           }
 
           // NEUEN USER ERSTELLEN
           console.log("🆕 GOOGLE AUTH - Creating new user...");
-          
+
           user = new User({
             email: userEmail,
             password: "oauth_user",
@@ -81,15 +83,15 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
             name: profile.displayName,
             avatar: profile.photos[0]?.value,
             isEmailVerified: true,
-            role: 'kunde',
-            authProvider: 'google',
+            role: "kunde",
+            authProvider: "google",
             createdAt: new Date(),
-            lastLogin: new Date()
+            lastLogin: new Date(),
           });
 
           await user.save();
           isNewUser = true;
-          
+
           console.log("✅ GOOGLE AUTH - New OAuth user created successfully");
           console.log("  - New User ID:", user._id);
           console.log("  - Email:", user.email);
@@ -100,13 +102,9 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
           if (isNewUser) {
             try {
               console.log("📧 SENDING GOOGLE OAUTH WELCOME EMAIL...");
-              
+
               if (emailService && emailService.sendOAuthWelcomeEmail) {
-                const emailResult = await emailService.sendOAuthWelcomeEmail(
-                  user.email,
-                  "google",
-                  user.name
-                );
+                const emailResult = await emailService.sendOAuthWelcomeEmail(user.email, "google", user.name);
 
                 if (emailResult && emailResult.success) {
                   console.log("✅ GOOGLE OAUTH WELCOME EMAIL SENT SUCCESSFULLY");
@@ -123,7 +121,6 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
 
           console.log("✅ GOOGLE AUTH CALLBACK COMPLETED SUCCESSFULLY\n");
           return done(null, user);
-          
         } catch (error) {
           console.error("❌ GOOGLE AUTH ERROR:", error);
           console.error("  - Error Name:", error.name);
@@ -147,9 +144,9 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
       {
         clientID: process.env.GITHUB_CLIENT_ID,
         clientSecret: process.env.GITHUB_CLIENT_SECRET,
-        callbackURL: getCallbackURL('github'),
+        callbackURL: getCallbackURL("github"),
         // ERWEITERTE SCOPES für private Emails
-        scope: ['user:email', 'read:user']
+        scope: ["user:email", "read:user"],
       },
       async (accessToken, refreshToken, profile, done) => {
         try {
@@ -161,13 +158,13 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
 
           // VERBESSERTES Email-Handling für private GitHub-Accounts
           let userEmail = null;
-          
+
           // Schritt 1: Versuche Email aus Profil zu holen
           if (profile.emails && profile.emails.length > 0) {
             console.log("📧 Found emails in profile:", profile.emails.length);
-            
+
             // Suche primary email
-            const primaryEmail = profile.emails.find(email => email.primary);
+            const primaryEmail = profile.emails.find((email) => email.primary);
             if (primaryEmail) {
               userEmail = primaryEmail.value;
               console.log("✅ Found primary email from profile:", userEmail);
@@ -177,33 +174,33 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
               console.log("✅ Using first available email from profile:", userEmail);
             }
           }
-          
+
           // Schritt 2: Falls keine Email im Profil, GitHub API verwenden
           if (!userEmail) {
             console.log("⚠️ No email from profile, trying GitHub API...");
-            
+
             try {
-              const response = await fetch('https://api.github.com/user/emails', {
+              const response = await fetch("https://api.github.com/user/emails", {
                 headers: {
-                  'Authorization': `token ${accessToken}`,
-                  'User-Agent': 'Portfolio-App',
-                  'Accept': 'application/vnd.github.v3+json'
-                }
+                  Authorization: `token ${accessToken}`,
+                  "User-Agent": "Portfolio-App",
+                  Accept: "application/vnd.github.v3+json",
+                },
               });
-              
+
               if (response.ok) {
                 const emails = await response.json();
                 console.log("📧 GitHub API emails response:", emails);
-                
+
                 if (emails && emails.length > 0) {
                   // Suche primary & verified email
-                  const primaryEmail = emails.find(email => email.primary && email.verified);
+                  const primaryEmail = emails.find((email) => email.primary && email.verified);
                   if (primaryEmail) {
                     userEmail = primaryEmail.email;
                     console.log("✅ Found primary verified email via API:", userEmail);
                   } else {
                     // Fallback: erste verifizierte Email
-                    const verifiedEmail = emails.find(email => email.verified);
+                    const verifiedEmail = emails.find((email) => email.verified);
                     if (verifiedEmail) {
                       userEmail = verifiedEmail.email;
                       console.log("✅ Found verified email via API:", userEmail);
@@ -226,12 +223,17 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
           if (!userEmail) {
             console.error("❌ GITHUB AUTH - No email available from any source");
             console.error("  - Profile emails:", profile.emails);
-            console.error("  - Suggestion: Make sure your GitHub account has a public email or grant email permissions");
-            
-            return done(new Error(
-              "No email address available from GitHub account. " +
-              "Please either make your email public in GitHub settings or ensure the app has email permissions."
-            ), null);
+            console.error(
+              "  - Suggestion: Make sure your GitHub account has a public email or grant email permissions"
+            );
+
+            return done(
+              new Error(
+                "No email address available from GitHub account. " +
+                  "Please either make your email public in GitHub settings or ensure the app has email permissions."
+              ),
+              null
+            );
           }
 
           console.log("📧 Final email to use:", userEmail);
@@ -244,7 +246,7 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
             console.log("✅ GITHUB AUTH - Existing user found");
             console.log("  - User ID:", user._id);
             console.log("  - Current Role:", user.role);
-            
+
             // GitHub-Daten aktualisieren
             if (!user.githubId) {
               user.githubId = profile.id;
@@ -257,13 +259,13 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
               user.lastLogin = new Date();
               await user.save();
             }
-            
+
             return done(null, user);
           }
 
           // NEUEN USER ERSTELLEN
           console.log("🆕 GITHUB AUTH - Creating new user...");
-          
+
           user = new User({
             email: userEmail,
             password: "oauth_user",
@@ -271,15 +273,15 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
             name: profile.displayName || profile.username,
             avatar: profile.photos?.[0]?.value,
             isEmailVerified: true,
-            role: 'kunde',
-            authProvider: 'github',
+            role: "kunde",
+            authProvider: "github",
             createdAt: new Date(),
-            lastLogin: new Date()
+            lastLogin: new Date(),
           });
 
           await user.save();
           isNewUser = true;
-          
+
           console.log("✅ GITHUB AUTH - New OAuth user created successfully");
           console.log("  - New User ID:", user._id);
           console.log("  - Email:", user.email);
@@ -289,13 +291,9 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
           if (isNewUser) {
             try {
               console.log("📧 SENDING GITHUB OAUTH WELCOME EMAIL...");
-              
+
               if (emailService && emailService.sendOAuthWelcomeEmail) {
-                const emailResult = await emailService.sendOAuthWelcomeEmail(
-                  user.email,
-                  "github",
-                  user.name
-                );
+                const emailResult = await emailService.sendOAuthWelcomeEmail(user.email, "github", user.name);
 
                 if (emailResult && emailResult.success) {
                   console.log("✅ GITHUB OAUTH WELCOME EMAIL SENT SUCCESSFULLY");
@@ -312,7 +310,6 @@ if (process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET) {
 
           console.log("✅ GITHUB AUTH CALLBACK COMPLETED SUCCESSFULLY\n");
           return done(null, user);
-          
         } catch (error) {
           console.error("❌ GITHUB AUTH ERROR:", error);
           console.error("  - Error Name:", error.name);
@@ -349,14 +346,14 @@ export const getOAuthStatus = () => {
   return {
     google: {
       enabled: !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
-      callbackURL: getCallbackURL('google')
+      callbackURL: getCallbackURL("google"),
     },
     github: {
       enabled: !!(process.env.GITHUB_CLIENT_ID && process.env.GITHUB_CLIENT_SECRET),
-      callbackURL: getCallbackURL('github')
+      callbackURL: getCallbackURL("github"),
     },
     environment: process.env.NODE_ENV,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 };
 
