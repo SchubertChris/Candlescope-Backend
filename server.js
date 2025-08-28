@@ -3,9 +3,8 @@ import express from "express";
 import cors from "cors";
 import passport from "./config/passport/index.js";
 import dotenv from "dotenv";
-import mongoose from "mongoose";
 import { ENV } from "./utils/env.js";
-import { endpointDisplay } from "./endpoints.js";
+import { endpointDisplay } from "./debug/endpoints.js";
 
 // Core-Setup
 import { corsOptions } from "./config/cors.js";
@@ -19,11 +18,7 @@ import { applyNewsletterTracking } from "./routes/newsletter-tracking.js";
 import { applyErrorHandling } from "./middleware/error.js";
 
 // Normal Routes
-import authRoutes from "./routes/auth.js";
-import contactRoutes from "./routes/contact.js";
-import dashboardRoutes from "./routes/dashboard.js";
-import oauthRoutes from "./routes/oauth.js";
-import newsletterRoutes from "./routes/newsletter.js";
+import router from "./routes/index.js";
 
 dotenv.config();
 const app = express();
@@ -38,11 +33,7 @@ applySecurityHeaders(app);
 applyRequestLogging(app);
 
 // API-Routen
-app.use("/api/auth", authRoutes);
-app.use("/api/oauth", oauthRoutes);
-app.use("/api/contact", contactRoutes);
-app.use("/api/dashboard", dashboardRoutes);
-app.use("/api/newsletter", newsletterRoutes);
+app.use("/api", router);
 
 // Extra-Routen
 applyNewsletterTracking(app);
