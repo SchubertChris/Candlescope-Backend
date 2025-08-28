@@ -9,8 +9,6 @@
     - Rechnung + Preview + Datei [PDF]
     - Einstellungen [User Mask, PW bestätigung, ändern]
 
-
-
 # 2. 
 
 1. Anbindung von Cloudenary 

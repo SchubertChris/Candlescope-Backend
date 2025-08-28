@@ -18,10 +18,10 @@ const contactRateLimit = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // KORRIGIERT: Entfernt problematischen keyGenerator - verwendet Standard-Generator
+  // Entfernt problematischen keyGenerator - verwendet Standard-Generator
   skip: (req) => {
     // Development komplett überspringen
-    return process.env.NODE_ENV === 'development';
+    return process.env.NODE_ENV === 'development'; // oder IP-Whitelist
   }
 });
 

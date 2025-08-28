@@ -1,5 +1,4 @@
 // config/passport.js
-// VOLLSTÄNDIGE DATEI - OAuth mit GitHub Email-Fix für private Accounts
 import passport from "passport";
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import { Strategy as GitHubStrategy } from "passport-github2";
@@ -16,7 +15,7 @@ console.log("GOOGLE_CLIENT_SECRET:", process.env.GOOGLE_CLIENT_SECRET ? "✅ LOA
 console.log("GITHUB_CLIENT_ID:", process.env.GITHUB_CLIENT_ID ? "✅ LOADED" : "❌ MISSING");
 console.log("GITHUB_CLIENT_SECRET:", process.env.GITHUB_CLIENT_SECRET ? "✅ LOADED" : "❌ MISSING");
 
-// HINZUGEFÜGT: Dynamische Callback-URL Funktion
+// Dynamische Callback-URL Funktion
 const getCallbackURL = (provider) => {
   const baseURL = process.env.NODE_ENV === 'production' 
     ? process.env.BACKEND_URL || 'https://candlescope-backend.onrender.com'
