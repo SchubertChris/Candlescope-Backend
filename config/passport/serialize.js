@@ -1,4 +1,4 @@
-import User from "../../models/user/user";
+import User from "../../models/user/User.js";
 
 export function serialize(user, done) {
   console.log("🔐 SERIALIZING USER:", user._id);

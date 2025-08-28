@@ -1,4 +1,4 @@
-import User from "../../models/user/user.js";
+import User from "../../models/user/User.js";
 import emailService from "../email-service.js";
 
 export async function findOrCreateOAuthUser(provider, profile) {

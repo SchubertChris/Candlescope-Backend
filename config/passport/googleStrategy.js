@@ -1,5 +1,5 @@
 import { Strategy as GoogleStrategy } from "passport-google-oauth20";
-import { ENV } from "../../utils/env";
+import { ENV } from "../../utils/env.js";
 import { findOrCreateOAuthUser } from "../../services/oauth/userService.js";
 
 export default function googleStrategy(passport) {

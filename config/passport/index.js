@@ -1,6 +1,6 @@
 import passport from "passport";
 import googleStrategy from "./googleStrategy.js";
-import githubStrategy from "./githubStrategy.js";
+import githubStrategy from "./gitHubStrategy.js";
 import { serialize, deserialize } from "./serialize.js";
 
 googleStrategy(passport);
